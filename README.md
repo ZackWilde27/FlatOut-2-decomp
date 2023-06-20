@@ -1,4 +1,4 @@
-# FlatOut 2 Decompiled
+# FlatOut 2 Decompilation
 My on-going decompilation of FlatOut 2
 
 
