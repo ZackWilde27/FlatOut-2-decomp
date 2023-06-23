@@ -20,6 +20,4 @@ FlatOut2.exe.gzf is the Ghidra zip file, for anyone wanting to help with the pro
 
 <br>
 
-Keep in mind, it's nowhere near completion
-
-I've also included the ghidra zip, still new to GitHub but pull requests welcome and all that.
+Keep in mind, as of now it's nowhere near completion
