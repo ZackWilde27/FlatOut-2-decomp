@@ -100,7 +100,7 @@ DLGPROC g_dlgproc;
 int setupFlag = 0;
 
 
-unsigned int CheckDirectXVersion(LPBYTE *expectedVersion)
+int CheckDirectXVersion(LPBYTE *expectedVersion)
 {
   HKEY hkey;
   LPBYTE lpdata;
@@ -122,7 +122,6 @@ unsigned int CheckDirectXVersion(LPBYTE *expectedVersion)
   LPBYTE currentData;
   bool isOlder;
 
-  // I don't know what the purpose of this is, it either returns 1 or breaks anyways.
   while (true)
   {
     currentData = *dataptr;
