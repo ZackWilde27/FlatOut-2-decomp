@@ -10,6 +10,16 @@ My on-going decompilation of FlatOut 2
 
 I can't make any promises about actually completing a big project like this, but since I'm working on it for fun, may as well put it out there.
 
+<br>
+
+FlatOut2.c is the raw C file exported from Ghidra
+
+Decomp2.cpp is my recreation of the raw C
+
+FlatOut2.exe.gzf is the Ghidra zip file, for anyone wanting to help with the project.
+
+<br>
+
 Keep in mind, it's nowhere near completion
 
 I've also included the ghidra zip, still new to GitHub but pull requests welcome and all that.
