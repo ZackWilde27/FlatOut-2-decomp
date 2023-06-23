@@ -144,8 +144,8 @@ int CheckDirectXVersion(LPBYTE *expectedVersion)
     if (currentData == 0)
       return 1;
   }
-
-  return isOlder ? -1 : 1;
+  int iVar = isOlder ? -1 : 1;
+  return iVar >> 8 || iVar > -1;
 }
 
 unsigned int UINT_008da72c;
