@@ -14,7 +14,7 @@ I can't make any promises about actually completing a big project like this, but
 
 FlatOut2.c is the full C file exported from Ghidra
 
-Decomp2.cpp is my recreation of the raw C
+Decomp2.cpp is my recreation so far
 
 FlatOut2.exe.gzf is the current Ghidra zip file, for anyone wanting to help with the project.
 
