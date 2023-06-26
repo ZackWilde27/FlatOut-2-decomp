@@ -155,7 +155,7 @@ int CheckDirectXVersion(LPBYTE* expectedVersion)
     LPBYTE currentData;
     bool isOlder;
 
-    // I don't know what the purpose of this is, it either returns 1 or breaks anyways.
+    // Still a bit confused by this
     while (true)
     {
         currentData = *dataptr;
