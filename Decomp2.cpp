@@ -1,7 +1,5 @@
 // FlatOut 2 Decompilation
 
-// My first ever decompilation, and given how long these things take, maybe not even.
-
 // So here's what I've learned so far:
 //
 // Almost every boolean is an integer. It turns out that deep down, bools are somehow slower than integers, I guess back in it's day, that fraction of performance mattered.
