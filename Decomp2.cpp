@@ -228,15 +228,16 @@ public:
 
 
 // FUN_0054c1d0:
-// Ok, I think I'm starting to figure out what this function is. It takes a pointer to the first character in a "string", converts backslashes into forward slashes, and does the reverse if param_1 is not 0
+// Ok, I think I'm starting to figure out what this function is. It takes a pointer to the first character in a "string", converts backslashes into forward slashes, and 
+// does the reverse if param_1 is not 0
 // 
 //
 // If param_1 is 0:
 //
 //  charptr is an array of unsigned characters, maybe it's a string, or their version of one. 
 //  This function returns the number of characters beyond the address of charptr. It decides the end when it reaches a 0
-//  thisptr seems to be a temporary variable, pointing at the current character. by the end it points at the 0 that ended the "string". The reason it's a variable is because
-// Ghidra is convinced this function came from a class, and thisptr must be a this
+//  thisptr seems to be a temporary variable, pointing at the current character. by the end it points to the byte after the ending 0, which seems kinda dangerous.
+// The reason it's a variable is because Ghidra is convinced this function came from a class, and thisptr must be a this
 
 // if param_1 is not 0:
 //
