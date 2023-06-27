@@ -1,5 +1,7 @@
 // FlatOut 2 Decompilation
 
+// My first ever decompilation, and given how long these things take, maybe not even.
+
 // So here's what I've learned so far:
 //
 // Almost every boolean is an integer. It turns out that deep down, bools are somehow slower than integers, I guess back in it's day, that fraction of performance mattered.
@@ -42,6 +44,68 @@
 #include <shellapi.h>
 
 // Structs
+
+// Credit to mrwonko on GitHub for their file object reverse engineering
+
+class FileObject
+{
+public:
+    void* vtable;
+
+    char buffer[0x4000]; // 0x4
+
+    int alwaysNeg1;           // 0x4004 - is -1 on newly opened track_spvs.gen
+
+    char* filePos;         // 0x4008 - "virtual" file pos - reads in 16kb blocks internally, but allows for arbitrary reads
+    char* realFilePos;     // 0x400C - real file's filePos, gets increased by bytesRead
+    void* size;        // 0x4010 - returned by BvhFile_Func8 unless it's -1 - *0x4008 otherwise
+    HANDLE handle;      // 0x4014
+    void* unknown;         // 0x4018 - some bitmask?
+    char* filenameRelated; // 0x401C
+    char* filenameRelated; // 0x4020
+    int always0_0;
+    int always0_1;
+    int always0_2;
+    int always0_3;
+
+    // Writes a section of the file to it's handle, starting at the buffer_item. Returns the number of bytes actually written for comparison.
+    // Updates realFilePos and filePos to point after the written bytes.
+    int WriteFileToHandle(char buffer_item, DWORD bytesToWrite)
+    {
+        int bytesWritten = 0;
+        int totalBytesWritten = 0;
+        HANDLE hFile;
+        DWORD tempToWrite;
+
+        // My own addition, just to avoid changing the buffer_item directly.
+        // It's probably intentional for some reason, but for now, I haven't figured it out.
+        LPCVOID buffer_temp = &buffer_item;
+
+        if (bytesToWrite != 0)
+        {
+            hFile = this->handle;
+
+            for (int d = bytesToWrite; d != 0; d -= tempToWrite)
+            {
+                // Writes in 64 KB chunks unless what's left is less.
+                tempToWrite = 0xffff;
+                if (d < 0x10000)
+                    tempToWrite = d;
+
+                WriteFile(hFile, &buffer_temp, tempToWrite, (LPDWORD)&bytesWritten, NULL);
+                // I tried to make this less confusing by just adding but it throws errors about incomplete objects.
+                buffer_temp = (LPCVOID)((int)buffer_temp + tempToWrite);
+                totalBytesWritten += bytesWritten;
+            }
+        }
+        // Advance the pointers
+        this->realFilePos = this->realFilePos + bytesToWrite;
+        this->filePos = this->filePos + bytesToWrite;
+        return totalBytesWritten;
+    }
+};
+
+
 
 struct undefined4 {
     float nothing;
@@ -155,7 +219,7 @@ int CheckDirectXVersion(LPBYTE* expectedVersion)
     LPBYTE currentData;
     bool isOlder;
 
-    // Still a bit confused by this
+    // I'm still not sure what this part does.
     while (true)
     {
         currentData = *dataptr;
@@ -179,11 +243,13 @@ int CheckDirectXVersion(LPBYTE* expectedVersion)
             return 1;
     }
 
-    // I worked out the obfuscated version and converted it to:
+    // I worked out the complicated version and converted it to:
     int iVar = isOlder ? -1 : 1;
 
     return iVar >> 9 | iVar > -1;
 }
+
+
 
 void* PTR_008da72c;
 
@@ -221,55 +287,57 @@ public:
         param_2[1] = 0;
         return (unsigned int)param_2 & 0xffffff00;
     }
-}
+};
 
+// It used to be called neverReferencedAgain, because this next function checks if it's 0,
+// and that's the only time it's ever referenced. Maybe its for debugging?
+int g_slashOverride = 1;
 
-
-// FUN_0054c1d0:
-// Ok, I think I'm starting to figure out what this function is. It takes a pointer to the first character in a "string", converts backslashes into forward slashes, and 
-// does the reverse if param_1 is not 0
-// 
+// SlashConvertString:
 //
-// If param_1 is 0:
-//
-//  charptr is an array of unsigned characters, maybe it's a string, or their version of one. 
-//  This function returns the number of characters beyond the address of charptr. It decides the end when it reaches a 0
-//  thisptr seems to be a temporary variable, pointing at the current character. by the end it points to the byte after the ending 0, which seems kinda dangerous.
-// The reason it's a variable is because Ghidra is convinced this function came from a class, and thisptr must be a this
+// Since getting the length is part of copying a string, they have a mode that only gets the length.
+// It'll also convert uppercase to lowercase.
 
-// if param_1 is not 0:
+// If mode is 0:
+// This function copies the in_string to the out_string, returning the length of the in_string.
 //
-// 
+// Starts at the location of the in_string pointer
+// Convert backslashes to slashes
+// By the end, in_string and out_string will point at the character after the ending 0
 
-int FUN_0054c1d0(unsigned char *thisptr, int param_1, unsigned char *charptr)
+// If mode is not 0:
+// This function simply returns the length of the in_string
+//
+// Starts at the location after the first 0 character
+// If mode is 3, or g_slashOverride is 0, it'll convert slashes to backslashes
+// By the end, in_string will point at the character after the ending 0
+int SlashConvertString(unsigned char* in_string, int mode, unsigned char* out_string)
 {
+    unsigned char* tempPtr;
     unsigned char currentChar;
     int lenOfData;
     int counter;
     unsigned char* pcVar2;
-    unsigned char* tempPtr;
     
-    if (param_1 == 0)
+    if (mode == 0)
     {
-        tempPtr = charptr;
-        // Steps through the data until it reaches a 0, storing the next address as it goes.
+        tempPtr = in_string;
+        // Steps through the data until it reaches a 0 character, storing the next address as it goes.
         do
         {
             currentChar = *tempPtr;
             tempPtr = tempPtr + 1;
         } while (currentChar != '\0');
         // Converting raw addresses into byte difference
-        // charptr has a +1 to account for the ending 0
-        lenOfData = (int)tempPtr - ((int)charptr + 1);
+        lenOfData = (int)tempPtr - ((int)in_string + 1);
         counter = lenOfData;
         if (lenOfData != 0)
         {
-            do
+            for (int x = lenOfData; x != 0; x--)
             {
                 // Converts backslashes to forward slashes, and uppercase to lowercase
-                // thisptr and charptr both point at the same thing. Why.
-                currentChar = *charptr;
-                charptr = charptr + 1;
+                currentChar = *in_string;
+                in_string = in_string + 1;
                 if (currentChar == '\\')
                     currentChar = '/';
                 else
@@ -280,56 +348,71 @@ int FUN_0054c1d0(unsigned char *thisptr, int param_1, unsigned char *charptr)
                         currentChar += ' ';
                     }
                 }
-                // I don't see the purpose of using thisptr, since charptr should already be doing the work.
-                thisptr = &currentChar;
-                thisptr = thisptr + 1;
-                
-                counter -= 1;
-            } while (counter != 0);
+                // Setting the out_string to point at the address of currentChar
+                out_string = &currentChar;
+                out_string = out_string + 1;
+            }
             return lenOfData;
         }
     }
     else
     {
-        *thisptr = 0;
-        tempPtr = thisptr;
+        // If mode is not 0, replace the first character to a 0.
+        *out_string = 0;
+        tempPtr = out_string;
+        // So first it steps through until a 0, and starts from there instead.
         do
         {
             pcVar2 = tempPtr;
             tempPtr = pcVar2 + 1;
         } while (*pcVar2 != '\0');
-        currentChar = *charptr;
+
+        currentChar = *in_string;
+
         while (currentChar != '\0')
         {
-            charptr = charptr + 1;
-            // This is starting to seem like a converter/reverter function of some kind, with a problem.
-            // This one converts slashes to backslashes, but good luck trying
-            // to figure out which characters used to be uppercase.
-            if (neverReferencedAgain == 0 || param_1 == 3)
+            in_string = in_string + 1;
+            if (g_slashOverride == 0 || mode == 3)
                 if (currentChar == '/')
+                {
                     currentChar = '\\';
+                }
+            else if (currentChar == '\\')
+                currentChar = '/';
 
+            // Converting to lowercase to uppercase
+            lenOfData = isupper(currentChar);
+            if (lenOfData != 0)
+                currentChar += ' ';
 
+            *pcVar2 = currentChar;
+            pcVar2 = pcVar2 + 1;
+            currentChar = *in_string;
         }
+        lenOfData = (int)pcVar2 - (int)out_string;
     }
     *pcVar2 = '\0';
     return lenOfData;
 }
 
-
-
-char FUN_0054c610(char param_1, char* in_EAX)
+char FUN_0054c610(char param_1, unsigned char* in_EAX)
 {
     unsigned char local_154;
     unsigned char local_104;
+    AutoClass24 local_1;
     if (param_1 > -1 && PTR_008da72c != NULL)
     {
-        AutoClass24::FUN_00559b00(PTR_008da72c, in_EAX, (int*)&local_154);
+        local_1.FUN_00559b00(PTR_008da72c, in_EAX, (int*)&local_154);
         return;
     }
-    FUN_0054c1d0(&local_104, 0, in_EAX);
+    SlashConvertString(&local_104, 0, in_EAX);
 }
 
+void FUN_0054c540()
+{
+    astruct_94* unaff_ESI;
+    int* piVar1 = unaff_ESI->field23_0x20;
+}
 
 /////////////////////////////////////////////////
 // Loading Database
@@ -340,13 +423,8 @@ void LoadBinaryDatabase()
     free(MemoryPointer);
     MemoryPointer = NULL;
     memAllocationSize = 0;
-    char cVar2 = FUN_0054c610('\0');
-    if (cVar2 != '\0')
-    {
 
-    }
-
-
+    FUN_0054c540();
 
     //...
 
@@ -395,7 +473,7 @@ DWORD Startup(HINSTANCE hInstance, undefined4 param_3, char* flags)
     if (verCheck == 0 && DialogBoxParamA(hInstance, (LPCSTR)0x83, (HWND)0x0, g_dlgproc, (LPARAM)0) == (INT_PTR)1)
         return 0xffffffff;
 
-    FUN_00529ed0();
+    FUN_00529ed0(g_FPUControlWord);
 
     // Unused flags
     strstr(flags, "-binarydb");
@@ -410,7 +488,7 @@ DWORD Startup(HINSTANCE hInstance, undefined4 param_3, char* flags)
 /////////////////////////////////////////////////
 // Debug Stuff
 
-void CreateErrorMessageAndDie(char* message)
+void CreateErrorMessageAndDie(const char* message)
 {
     char* local_800;
     char* body[1024];
@@ -418,5 +496,37 @@ void CreateErrorMessageAndDie(char* message)
     sprintf(*body, "%s", &message);
     MessageBoxA(NULL, (LPCSTR)body, "Fatal error", MB_ICONERROR);
     ExitProcess(0);
+}
+
+DWORD DWORD_006a2cd8;
+undefined4 DAT_00000094;
+
+int main()
+{
+    int* piVar2;
+    int iVar1
+
+    // Get OS information
+    LPOSVERSIONINFOA osInfo = (LPOSVERSIONINFOA) &DAT_00000094;
+    GetVersionExA(osInfo);
+
+    DWORD dStack_110;
+    DWORD dStack_104;
+    unsigned int uStack_108;
+    DWORD_006a2cd8 = uStack_108;
+    if (dStack_104 != 2)
+    {
+        DWORD_006a2cd8 |= 0x8000;
+    }
+
+    HMODULE hmodule = GetModuleHandleA(NULL);
+    piVar2 = (int*)((int)&hmodule->unused + hmodule[0xf].unused);
+    if ((int)&hmodule->unused == 0x5a4d && *piVar2 == 0x4550)
+        if (*(short *)(piVar2 + 6) == 0x10b)
+            if (piVar2[0x1d] > 0xe)
+            {
+                iVar1 = piVar2[0x3a];
+            }
+
 }
 
