@@ -13,7 +13,3 @@ Decomp2.cpp is my recreation so far
 FlatOut2.exe.gzf is the current Ghidra zip file, for anyone wanting to help with the project.
 
 the untouched folder has the untouched Ghidra file, as it may be helpful.
-
-<br>
-
-Keep in mind, as of now it's nowhere near completion
