@@ -2,13 +2,9 @@
 
 // So here's what I've learned so far:
 //
-// Almost every boolean is an integer. It turns out that deep down, bools are somehow slower than integers, I guess back in it's day, that fraction of performance mattered.
-// I may have changed a few of these ints back to bools in Ghidra, thinking they should be bools, and also some 3rd party functions require them.
-//
 // 0x37CB2A4 and 0x37CB325 are 4-byte integers, counting up during the game, like a timer or something.
 // I've found that these values are set rather than incremented, because cheat engine can't override the value.
 //
-// 
 
 // Originally I made my own names for globals, but I'm now including the address to make investigating easier.
 
