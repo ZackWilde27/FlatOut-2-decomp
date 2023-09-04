@@ -1605,7 +1605,7 @@ void OpenBFS(LPCSTR filename, HANDLE* unaff_EDI)
     pAVar4 = AC24_008da72c;
     unaff_EDI[1] = bfsFile;
     FUN_0059b60(pAVar4, unaff_EDI, aiStack_10, 0, 0x10);
-    // The file must start with the characters "bfsl"
+    // The file must start with the characters "bfs1"
     if (aiStack_10[0] != 0x31736662)
         CreateErrorMessageAndDie("BFS archive <%s> has invalid id");
 
