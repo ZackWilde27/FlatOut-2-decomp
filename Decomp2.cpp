@@ -891,11 +891,164 @@ function wm.GenerateMenu(menuname, template)
 end
 
 
--- The listbox params for CreateSingleColumns
+-- The listbox params for CreateSingleColumnsListBox has the following structure
+--[[--/*
+local listboxParams={
+    ListBoxTemplate={},
+    Left=0,
+    Top=0,
+    LeftPadding=0,
+    RightPadding=0,
+    TopPadding=0,
+    BottomPadding=0,
+    RowWidth=100,
+    RowHeight=16,
+    RowPadding=0,
+    RowTemplate={},
+    RowTemplateType="Button",
+    RowTemplateCust=function(Row, RowNr)
+    end,
+    NumRows=1,
+}
+--]]--*/
+/* their comment system ended my comment
 
-/* There's more but that's a lot of typing. */
+function CreateSingleColoumnListBox(ListBoxParams)
+    local params=ListBoxParams
+
+    local width=params.LeftPadding + params.RowWidth + params.RightPadding
+    local height=params.TopPadding
+    height=height + params.RowHeight * params.NumRows
+    height=height + params.RowPadding * (params.NumRows - 1)
+    height=height + params.BottomPadding
+
+    if params.ListBoxTemplate.Parent==nil then
+        params.ListBoxTemplate.Position=SAFEPOS(params.Left, params.Top)
+    else
+        params.ListBoxTemplate.Position=POS(params.Left, params.Top)
+    end
+        
+    params.ListBoxTemplate.Size=SIZE(width, height)
+
+    local listBox=ListBox(params.ListBoxTemplate)
+
+    params.RowTemplate.Parent=listBox
+
+    local y=params.TopPadding
+    params.RowTemplate.Size=SIZE(params.RowWidth, params.RowHeight)
+
+    for i=1, params.NumRows do
+        params.RowTemplate.Position=POS(params.LeftPadding, y)
+        local row=addchild(_G[params.RowTemplateType] (params.RowTemplate))
+        params.RowTemplateCust(row, i)
+        y=y + params.RowPadding + params.RowHeight
+    end
+
+    return listBox
+end
 
 
+-- The listbox params for CreateDoubleColoumnListBox has the following structure
+--[[--/*
+local listboxParams={
+    ListBoxTemplate={},
+    Left=0,
+    Top=0,
+    LeftPadding=0,
+    RightPadding=0,
+    TopPadding=0,
+    BottomPadding=0,
+    RowWidth=100,
+    RowHeight=16,
+    RowPadding=0,
+    RowTemplate={},
+    RowTemplateType="Button",
+    RowTemplateCust=function(Row, RowNr)
+    end,
+    NumRows=1,
+    Coloumns={
+        [1]={
+        Name="coloumn1", -- _row# is added
+        ColoumnTemplate={},
+        ColoumnTemplateType="Button"
+        ColoumnTemplateCust=function(Coloumn, RowNr, ColoumnNr)
+        end
+        }
+    }
+}
+    --]]--*/
+/*
+
+
+function CreateMultiColoumnListBox(ListBoxParams)
+    local params=ListBoxParams
+
+    local width=params.LeftPadding + params.RowWidth + params.RightPadding
+    local height=params.TopPadding
+    height=height + params.RowHeight * params.NumRows
+    height=height + params.RowPadding * (params.NumRows - 1)
+    height=height + params.BottomPadding
+
+    if params.ListBoxTemplate.Parent==nil then
+        params.ListBoxTemplate.Position=SAFEPOS(params.Left, params.Top)
+    else
+        params.ListBoxTemplate.Position=POS(params.Left, params.Top)
+    end
+
+    params.ListBoxTemplate.Size=SIZE(width, height)
+
+    local listBox=ListBox(params.ListBoxTemplate)
+    
+    params.RowTemplate.Parent=listBox
+
+    local y=params.TopPadding
+    params.RowTemplate.Size=SIZE(params.RowWidth, params.RowHeight)
+
+    local numColoumns=table.getn(params.Coloumns)
+    for i=1, params.NumRows do
+        params.RowTemplate.Position=POS(params.LeftPadding, y)
+        local row=addchild(_G[params.RowTemplateType] (params.RowTemplate))
+        params.RowTemplateCust(row, i)
+
+        for j=1, numColoumns do
+            local coloumn=params.Coloumns[j]
+            coloumn.ColoumnTemplate.Parent=row
+            coloumn.ColoumnTemplate.Name=coloumn.Name..string.format("_row%i", i)
+            local coloumncont=addchild(_G[coloumn.ColoumnTemplateType] (coloumn.ColoumnTemplate))
+            coloumn.ColoumnTemplateCust(coloumncont, i, j)
+        end
+
+        y=y + params.RowPadding + params.RowHeight
+    end
+
+    return listBox
+end
+
+
+
+
+
+
+
+
+
+*/
+
+/* Lua Script Part 3: Fonts
+
+function AddAllFonts()
+local k,v
+for k,v in pairs(Fonts) do
+    if k ~= "DataPath" then
+        AddFont(k, v.Texture, v.Data, v.TopPadding or 0)
+    end
+end
+end
+SetGlobalFontScale(GlobalFontScale or 1.00)
+AddAllFonts()
+AddAllFonts=nil
+
+*/
 
 /////////////////////////////////////////////////
 // Direct X
