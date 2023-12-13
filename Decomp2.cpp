@@ -1,10 +1,22 @@
 // FlatOut 2 Decompilation
 
-// So here's what I've learned so far:
+// So here's what I've learned using Cheat Engine:
 //
 // 0x37CB2A4 and 0x37CB325 are 4-byte integers, counting up during the game, like a timer or something.
-// I've found that these values are set rather than incremented, because cheat engine can't override the value.
+// I've found that these values are set rather than incremented, because I can't override the value.
 //
+// Things that I have tried overriding and nothing happened:
+// 
+// 0x6D6AE0 through 0x6D6BE8 is related to the currently selected car when choosing one
+//
+// When choosing a car, 0x6D69D8 through 0x6D6A0B flip between two different states based on the car.
+//
+// The name of the currently playing song is printed at 0x6D6D50.
+// 
+
+
+
+// Bugbear used Visual Studio 2003, which means we know the IDE, compiler, all that. But finding a copy these days is difficult.
 
 // Originally I made my own names for globals, but I'm now including the address to make investigating easier.
 
@@ -25,6 +37,8 @@
 #include "D3DX9Effect.h"
 #include "D3dx9tex.h"
 
+#include <dinput.h>
+
 
 // GDI32.DLL
 #include <wingdi.h>
@@ -44,62 +58,29 @@
 #include <fileapi.h>
 #include <libloaderapi.h>
 #include <process.h>
+#include <synchapi.h>
+#include <winbase.h>
+#include <winsock.h>
+#include <winsock2.h>
+#include <sys/stat.h>
 
 /////////////////////////////////////////////////
 // Variables
+// They have been sorted by address location, grouped by relevance when possible.
 
 struct Settings Settings;
 
-HINSTANCE g_Instance;
-
 DLGPROC g_dlgproc;
 
-// It's an int, but used as a bool.
-int setupFlag_008da684 = 0;
+LPCSTR lpOperation_0066ab90;
+
+const char* u_NO_TEXT_0066b38c = "u\"NO_TEXT\"";
 
 // This build is dated September 20th, 2004, which is a couple months before FlatOut 1 released.
 // Leads me to believe it means ROMU v0.28
 const char* verString_00698b4c = "Version_0.28_build_2004.09.20";
 
-unsigned int UINT_008e5770;
-unsigned int UINT_008e5d70;
-IDirect3D9* D3D9_008da784;
-HINSTANCE HINST_008da2dc;
-unsigned int UINT_008da270;
-HWND HWND_008da79c;
-unsigned int UINT_008da728;
-unsigned int UINT_008d7c30;
-
-HICON HICON_008da544;
-unsigned int UINT_008da540;
-LRESULT UINT_006d6900;
-unsigned int UINT_006d6908;
-unsigned int UINT_008da548;
-unsigned int UINT_006d690c;
-unsigned int UINT_006d68d0;
-unsigned int UINT_006d68d8;
-unsigned int UINT_006d68e8;
-unsigned int UINT_006d68f0;
-
-LRESULT DAT_006d68dc;
-LRESULT DAT_006d68e0;
-LRESULT DAT_006d68ec;
-
-HGDIOBJ HGDIOBJ_006d67b8;
-HWND HWND_008da56c;
-LPCSTR lpOperation_0066ab90;
-
-LRESULT UINT_008db344[30];
-
-void* PTR_LAB_007a9e4[5];
-
-const char** PTR_u_NO_TEXT_0069df4 = &u_NO_TEXT_0066b38c;
-
-const char* u_NO_TEXT_0066b38c = "u\"NO_TEXT\"";
-
-unsigned int unkn_008da6a0;
-unsigned short FPUConW_008d781c;
-
+// These are treated like an array, AutoClass31s have an index into these DATs
 unsigned int DAT_0069ba70;
 unsigned int DAT_0069ba74;
 unsigned int DAT_0069ba78;
@@ -111,18 +92,79 @@ unsigned int DAT_0069ba8c;
 
 unsigned int UINT_0069c2d0;
 
+const char** PTR_u_NO_TEXT_0069df4 = &u_NO_TEXT_0066b38c;
+
+DWORD TimePassed_006a32e8;
+
+HGDIOBJ HGDIOBJ_006d67b8;
+LRESULT DAT_006d68dc;
+LRESULT DAT_006d68e0;
+LRESULT DAT_006d68ec;
+LRESULT UINT_006d6900;
+unsigned int UINT_006d6908;
+
+unsigned int UINT_006d690c;
+unsigned int UINT_006d68d0;
+unsigned int UINT_006d68d8;
+unsigned int UINT_006d68e8;
+unsigned int UINT_006d68f0;
+
+void* PTR_LAB_007a9e4[5];
+
+unsigned short FPUConW_008d781c;
+
 unsigned int UINT_008d780c;
 unsigned int UINT_008d7bb0;
 
+
+unsigned int UINT_008da270;
+HINSTANCE HINST_008da2dc;
+
+
+
+unsigned int UINT_008da540;
+HICON HICON_008da544;
+unsigned int UINT_008da548;
+
 void* MEM_008da568;
+
+unsigned int UINT_008da728;
+
+// 1 = delete bfs file on opening, 0 = normal
+unsigned int UINT_008da730;
+
+IDirect3D9* D3D9_008da784;
+HWND HWND_008da79c;
+
+unsigned int UINT_008d7c30;
+
+HWND HWND_008da56c;
+
+// It's an int, but used as a bool.
+int setupFlag_008da684 = 0;
+
+unsigned int unkn_008da6a0;
+
+// The handle of the .exe file
+HINSTANCE HINST_008da564;
+
 void (*FUNC_008da6f4)();
+
+unsigned int UINT_008da6fc;
+
 unsigned int UINT_008da700;
 AutoClass24* AC24_008da72c;
 unsigned int UINT_008da730;
 
+LRESULT UINT_008db344[30];
+
+unsigned int UINT_008e5770;
+
+unsigned int UINT_008e5d70;
+
+int* int_008e8420;
+
 unsigned int UINT_008e855c;
-
-
 
 void* MemoryPointer;
 size_t memAllocationSize;
@@ -131,7 +173,26 @@ int _Size;
 
 
 
-
+const char* Funcs_00652918[] =
+{
+    "__index",
+    "__newindex",
+    (const char*)0x5F,
+    "__mode",
+    (const char*)0x5F,
+    "__add",
+    "__sub",
+    "__mul",
+    "__div",
+    "__mod",
+    "__pow",
+    "__unm",
+    "__len",
+    (const char*)0x5F,
+    (const char*)0x5F,
+    "__concat",
+    "__call"
+};
 
 /////////////////////////////////////////////////
 // Structs
@@ -173,6 +234,12 @@ struct astruct_42 {
     unsigned int field6_0xe4;
 };
 
+struct astruct_97 {
+    // 8 undefined bytes at offset 0x0
+    unsigned int** field_0x8[2];
+    int* field_0x10;
+};
+
 
 struct astruct_110 {
     // 4 undefined bytes at 0x0
@@ -202,7 +269,8 @@ struct astruct_114
 
 struct astruct_138
 {
-    // 104 undefined bytes at offset 0x0
+    // 100 undefined bytes at offset 0x0
+    unsigned int int_0x64;
     HANDLE handle_0x68;
     // 8 undefined bytes at offset 0x6C
     LONG long_0x74;
@@ -219,6 +287,18 @@ struct astruct_140 {
     HINSTANCE hinst_0x58;
 };
 
+struct astruct_147 {
+    int int1_0x0;
+    int int2_0x4;
+};
+
+struct astruct_148 {
+    // 4 undefined bytes at offset 0x0
+    LPCRITICAL_SECTION critical_0x4;
+    // 25 undefined bytes at offset 0x8
+    char char_0x21;
+};
+
 // placeholder
 struct undefined4 {
     float nothing;
@@ -228,7 +308,7 @@ struct undefined4 {
 // Got this info from the cfg files
 
 struct Version {
-    int Settings = 15; // 0 - 1,000,000
+    unsigned int Settings = 15; // 0 - 1,000,000
 };
 
 struct Game {
@@ -276,8 +356,8 @@ struct Audio {
 };
 
 struct Network {
-    int Port = 23756;                     // 0 - 65536
-    int BroadcastPort = 23757;            // 0 - 65536
+    unsigned int Port = 23756;                     // 0 - 65536
+    unsigned int BroadcastPort = 23757;            // 0 - 65536
     int VoiceOutputVolume = 80;           // 0 - 100
     int VoiceJitterMaxDelay = 10;         // 0 - 100
     int VoiceJitterMaxVariation = 10;     // 0 - 100
@@ -299,42 +379,6 @@ struct Settings {
 /////////////////////////////////////////////////
 // Classes
 
-// AutoClass 23
-class Handleish
-{
-public:
-    HANDLE handle;
-
-    undefined4 __fastcall LoadFromHandle(DWORD numBytes, astruct_138 *unaff_ESI, LONG in_EAX, LPVOID unaff_EBX)
-    {
-        DWORD DVar2 = numBytes;
-        DWORD DVar3;
-        bool BVar1;
-        HANDLE hFile = this->handle;
-        unaff_ESI->dw_0x80 = numBytes;
-        unaff_ESI->long_0x74 = in_EAX;
-        unaff_ESI->unkn_0x78 = NULL;
-        unaff_ESI->handle_0x68 = hFile;
-        if (UINT_008da730 == 0)
-        {
-            DVar3 = SetFilePointer(hFile, in_EAX, NULL, FILE_BEGIN);
-            if (DVar3 == 0xffffffff)
-            {
-                GetLastError();
-            }
-            else
-            {
-                BVar1 = ReadFile(hFile, unaff_EBX, DVar2, &numBytes, NULL);
-                if (BVar1 > -1) goto LAB_00559FAB;
-            }
-        }
-        else
-        {
-            BVar1 = ReadFile(hFile, unaff_EBX, numBytes, NULL, (LPOVERLAPPED)&unaff_ESI);
-        }
-    }
-};
-
 // Credit to mrwonko on GitHub for their file object reverse engineering
 // AutoClass 25
 class FileObject
@@ -351,9 +395,9 @@ public:
     char* realFilePos;     // 0x400C - real file's filePos, gets increased by bytesRead
     void* size;        // 0x4010 - returned by BvhFile_Func8 unless it's -1 - *0x4008 otherwise
     HANDLE handle;      // 0x4014
-    void* unknown;         // 0x4018 - some bitmask?
-    char* filenameRelated; // 0x401C
-    char* filenameRelated; // 0x4020
+    unsigned int fileattributes;         // 0x4018 - bitmask related to the parameters the file was opened with
+    char* filename1; // 0x401C
+    char* filename2; // 0x4020
     int always0_0; // 0x4024
     int always0_1; // 0x4028
     int always0_2; // 0x402C
@@ -384,7 +428,7 @@ public:
                 if (d < 0x10000)
                     tempToWrite = d;
 
-                WriteFile(hFile, &buffer_item, tempToWrite, bytesWritten, NULL);
+                WriteFile(hFile, buffer_temp, tempToWrite, bytesWritten, NULL);
                 // I tried to make this less confusing by just adding but it throws errors about incomplete objects.
                 buffer_temp = (LPCVOID)((int)buffer_temp + tempToWrite);
                 totalBytesWritten += *bytesWritten;
@@ -395,7 +439,132 @@ public:
         this->filePos = this->filePos + bytesToWrite;
         return totalBytesWritten;
     }
+
+    // Updates the file pointer to the new value if it isn't already there.
+    void FileObject_SetFilePointer(int newLoc)
+    {
+        if (this->realFilePos != (char*)newLoc)
+        {
+            this->realFilePos = (char*)newLoc;
+            SetFilePointer(this->handle, newLoc, NULL, FILE_BEGIN);
+        }
+        return;
+    }
+
+    // FileObject_New() is a more complicated version of FileObject_Create()
+    FileObject* FileObject_New(unsigned int unaff_EBX, const char* filename_unaff_EDI)
+    {
+        FileObject* pAVar3 = NULL;
+        if ((unaff_EBX & 1) == 0)
+        {
+            FileObject* piVar2 = (FileObject*)malloc(0x4024);
+            if (piVar2 != NULL)
+            {
+                piVar2->filePos = NULL;
+                piVar2->realFilePos = NULL;
+                piVar2->handle = NULL;
+                piVar2->filename1 = NULL;
+                piVar2->fileattributes = NULL;
+                piVar2->vtable = &JMPTABLE_0067b6f8;
+                piVar2->alwaysNeg1 = -1;
+                pAVar3 = piVar2;
+            }
+            pAVar3->FileObject_Create();
+        }
+        else
+        {
+            struct stat result;
+            if (stat(filename_unaff_EDI, &result) == 0)
+            {
+                FileObject* pAVar2 = (FileObject*)malloc(0x4024);
+                if (pAVar2 != NULL)
+                {
+                    pAVar2->FileObject_Clear();
+                    pAVar3 = pAVar2;
+                }
+                pAVar3->FileObject_Create();
+                pAVar3->size = pvStack_18;
+                return pAVar3;
+            }
+        }
+        return pAVar3;
+    }
+
+    void FileObject_Create(LPCSTR lpFilename, unsigned int flags)
+    {
+        DWORD desiredAccess = 0;
+        DWORD creationDisposition = 0;
+        bool bVar2 = (flags & 1) != 0;
+        if (bVar2)
+        {
+            desiredAccess = GENERIC_READ;
+            creationDisposition = OPEN_EXISTING;
+        }
+        DWORD shareMode = bVar2;
+        DWORD flagsAndAttributes = bVar2;
+        if ((flags & 2) != 0)
+        {
+            desiredAccess |= GENERIC_WRITE;
+            creationDisposition |= CREATE_ALWAYS;
+            flagsAndAttributes |= FILE_ATTRIBUTE_NORMAL;
+            shareMode = FILE_SHARE_READ;
+        }
+        HANDLE handle = CreateFileA(lpFilename, desiredAccess, shareMode, NULL, creationDisposition, flagsAndAttributes, NULL);
+        this->fileattributes = flags;
+        this->handle = handle;
+        if ((handle == NULL) && (FUNC_008da6f4 != NULL))
+        {
+            FUNC_008da6f4();
+        }
+        return;
+    }
+
+    void FileObject_FlushBuffers()
+    {
+        FlushFileBuffers(this->handle);
+    }
+
+    char* FileObject_GetFilePosButLikeWhy()
+    {
+        return this->filePos;
+    }
+
+    bool FileObject_IsFilePosValid()
+    {
+        return (this->filePos > 0) && (this->size <= this->filePos);
+    }
+
+    int FileObject_GetSize()
+    {
+        return (this->size == (void*)0xffffffff) ? (int)this->filePos : (int)this->size;
+    }
+
+    void FileObject_Clear()
+    {
+        this->alwaysNeg1 = -1;
+        this->filePos = NULL;
+        this->realFilePos = NULL;
+        this->handle = NULL;
+        this->filename1 = NULL;
+        this->filename2 = NULL;
+        return;
+    }
 };
+
+void* PTR_Group_0066e448[7] = { &RecursivePointer, &FUN_00489670,  };
+
+// AutoClass32 ?
+void** RecursivePointer(void** addr, byte bFree)
+{
+    // Sets the address to point at this function.
+    addr = &PTR_Group_0066e448[0];
+    if (bFree & 1)
+    {
+        free(addr);
+    }
+    return addr;
+}
+
 
 /////////////////////////////////////////////////
 // Lua
@@ -1032,6 +1201,7 @@ end
 
 
 
+
 */
 
 /* Lua Script Part 3: Fonts
@@ -1049,6 +1219,7 @@ AddAllFonts()
 AddAllFonts=nil
 
 */
+
 
 /////////////////////////////////////////////////
 // Direct X
@@ -1106,10 +1277,28 @@ int CheckDirectXVersion(LPBYTE* expectedVersion)
     }
 
     // I worked out the complicated version and converted it to:
-    unsigned int iVar = isOlder ? -1 : 1;
+    unsigned int result = isOlder ? -1 : 1;
 
     // Concatenate by shifting over an extra bit and or-ing.
-    return iVar << 9 | iVar > -1;
+    return result << 9 | result > -1;
+}
+
+HMODULE DINPUTMODULE_008da744;
+FARPROC PTR_DirectInput8Create_008da784;
+void* PTR_008da74c;
+REFIID REFIID_006613e4;
+
+unsigned int LoadDInputLibrary()
+{
+    DINPUTMODULE_008da744 = LoadLibraryA("dinput8.dll");
+    PTR_DirectInput8Create_008da784 = GetProcAddress(DINPUTMODULE_008da744, "DirectInput8Create");
+    unsigned int punkOuter = NULL;
+    void** ppvOut = &PTR_008da74c;
+    REFIID riidltf = REFIID_006613e4;
+    HINSTANCE hInst = GetModuleHandleA(NULL);
+    DWORD dwVersion = DIRECTINPUT_VERSION;
+    int returnCode = (*PTR_DirectInput8Create_008da784)(hInst, dwVersion, riidltf, ppvOut, punkOuter);
+    return returnCode & ((returnCode > -1) ? 0 : -1);
 }
 
 /////////////////////////////////////////////////
@@ -1118,42 +1307,42 @@ int CheckDirectXVersion(LPBYTE* expectedVersion)
 // CreateD3DWindow
 //
 //
-HWND CreateD3DWindow(HWND parent, HINSTANCE hInstance, LPCSTR title, HICON icon, HCURSOR cursor, astruct_110* param_6, int param_7, BYTE param_8, unsigned int param_9, int * in_EAX)
+HWND CreateD3DWindow(HWND parent, HINSTANCE hInstance, LPCSTR title, HICON icon, HCURSOR cursor, astruct_110* param_6, int param_7, BYTE param_8, unsigned int flags, int * in_EAX)
 {
     int posX;
     int posY;
     unsigned int style;
-    unsigned int* puVar3 = &UINT_008e5770;
+    unsigned int* tempPtr = &UINT_008e5770;
     WNDCLASSA newWindow;
     HWND hWnd;
-    for (int n = 0x180; n != 0; n--)
+    for (posX = 0x180; posX != 0; posX--)
     {
-        *puVar3 = 0;
-        puVar3 = puVar3 + 1;
+        *tempPtr = 0;
+        tempPtr = tempPtr + 1;
     }
-    puVar3 = &UINT_008e5d70;
-    for (int n = 0x20; n != 0; n--)
+    tempPtr = &UINT_008e5d70;
+    for (posX = 0x20; posX != 0; posX--)
     {
-        *puVar3 = 0;
-        puVar3 = puVar3 + 1;
+        *tempPtr = 0;
+        tempPtr = tempPtr + 1;
     }
     if (D3D9_008da784 != NULL || (D3D9_008da784 = Direct3DCreate9(D3D_SDK_VERSION), D3D9_008da784 != NULL))
     {
         HINST_008da2dc = hInstance;
         // UINT_008da270 ends up as 19, does not seem to change.
-        UINT_008da270 = param_9;
+        UINT_008da270 = flags;
         int nWidth;
         int nHeight;
         int iStack_7c;
-
-        if ((param_9 & 4) == 0)
+        // In binary: 0000 0?00
+        if ((flags & 4) == 0)
         {
             nWidth = param_6->field0_0x4;
             nHeight = param_6->field1_0x8;
         }
         else
         {
-            style = ((param_9 & WS_EX_TRANSPARENT != 0) & 0xff310000) + WS_OVERLAPPEDWINDOW;
+            style = ((flags & WS_EX_TRANSPARENT != 0) & 0xff310000) + WS_OVERLAPPEDWINDOW;
             if (parent != NULL)
             {
                 style |= WS_CHILD;
@@ -1175,7 +1364,7 @@ HWND CreateD3DWindow(HWND parent, HINSTANCE hInstance, LPCSTR title, HICON icon,
             nWidth = iStack_7c;
         }
         newWindow.style = 0;
-        newWindow.lpfnWndProc = (WNDPROC)&LAB_005a6270;
+        newWindow.lpfnWndProc = &LAB_what;
         newWindow.cbClsExtra = 0;
         newWindow.cbWndExtra = 0;
         newWindow.hInstance = hInstance;
@@ -1185,8 +1374,9 @@ HWND CreateD3DWindow(HWND parent, HINSTANCE hInstance, LPCSTR title, HICON icon,
         newWindow.lpszMenuName = NULL;
         newWindow.lpszClassName = "BDX9 Render Window";
         RegisterClassA(&newWindow);
-        unsigned int uStack_98 = param_9 & 0x20;
-        if (uStack_98 == 0)
+        // In binary: 00?0 0000
+        unsigned int flagTest = flags & 0x20;
+        if (flagTest == 0)
         {
             posY = -0x80000000;
             posX = -0x80000000;
@@ -1209,7 +1399,7 @@ HWND CreateD3DWindow(HWND parent, HINSTANCE hInstance, LPCSTR title, HICON icon,
             EnableWindow(HWND_008da79c, TRUE);
             UpdateWindow(HWND_008da79c);
             SetFocus(HWND_008da79c);
-            if (uStack_98 == 0)
+            if (flagTest == 0)
             {
 
             }
@@ -1218,18 +1408,55 @@ HWND CreateD3DWindow(HWND parent, HINSTANCE hInstance, LPCSTR title, HICON icon,
     }
 }
 
-int HandleDialogBox(HWND hwnd, WPARAM wparam, short param_3, HWND param_4)
+LPDIRECT3DDEVICE9 LPDIRECT3DDEVICE9_008da788;
+int* PTR_008da718;
+HINSTANCE HINSTANCE_008da2dc;
+unsigned int UINT_008da798;
+
+// Destroying Windows
+void __fastcall DestroyWindow(int param_1)
+{
+    LPDIRECT3DDEVICE9 device = LPDIRECT3DDEVICE9_008da788;
+    bool deviceIsNotNull = LPDIRECT3DDEVICE9_008da788 != NULL;
+    if (deviceIsNotNull)
+        device->Release();
+
+    if (D3D9_008da784 != NULL)
+        D3D9_008da784->Release();
+
+    HWND hWnd = HWND_008da79c;
+    CHAR className;
+    if (HWND_008da79c != NULL)
+    {
+        HWND_008da79c = NULL;
+        UINT_008da798 = 0;
+        GetClassNameA(hWnd, &className, 0x3F);
+        DestroyWindow(hWnd);
+        UnregisterClassA(&className, HINSTANCE_008da2dc);
+        ShowCursor(TRUE);
+    }
+    LPDIRECT3DDEVICE9_008da788 = NULL;
+    D3D9_008da784 = NULL;
+    PTR_008da718 = NULL;
+    return;
+}
+
+
+///////////////////////////////////////////////////////
+// WndProcs
+
+LRESULT DlgProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
     HWND hDlg = hwnd;
     LRESULT LVar6;
     LRESULT* iVar10, * iVar11;
-    if (wparam != WM_INITDIALOG)
+    if (uMsg != WM_INITDIALOG)
     {
-        if (wparam == WM_NOTIFY)
+        if (uMsg == WM_NOTIFY)
         {
-            if (param_4[1].unused == 0x43d)
+            if (lParam[1].unused == 0x43d)
             {
-                if (param_4[2].unused == -0x10)
+                if (lParam[2].unused == -0x10)
                 {
                     // There were two options for it: WM_PSD_PAGESETUPDLG, and WM_USER. I chose the former.
                     UINT_006d6900 = SendDlgItemMessageA(hwnd, 0x43d, WM_PSD_PAGESETUPDLG, 0, 0);
@@ -1238,7 +1465,7 @@ int HandleDialogBox(HWND hwnd, WPARAM wparam, short param_3, HWND param_4)
                 return 1;
             }
         }
-        else if (wparam == WM_COMMAND)
+        else if (uMsg == WM_COMMAND)
         {
             if (param_3 == 1)
             {
@@ -1248,6 +1475,7 @@ int HandleDialogBox(HWND hwnd, WPARAM wparam, short param_3, HWND param_4)
                 UINT_006d690c = (unsigned int)(LVar6 == 1);
                 LVar6 = SendDlgItemMessageA(hwnd, 0x44e, BM_GETCHECK, 0, 0);
                 UINT_006d68d0 = (unsigned int)(LVar6 == 1);
+                /*
                 iVar11 = &UINT_008db344[UINT_008da548];
                 iVar10 = &UINT_008db344[UINT_008da548];
                 UINT_006d68d8 = iVar11[0x38];
@@ -1257,6 +1485,7 @@ int HandleDialogBox(HWND hwnd, WPARAM wparam, short param_3, HWND param_4)
                 UINT_006d68e8 = *(unsigned int*)(iVar10[4] + 4);
                 DAT_006d68ec = *(unsigned int*)(iVar10[4] + 8);
                 UINT_006d68f0 = *(unsigned int*)(iVar10[4] + 0xC);
+                */
                 EndDialog(hwnd, 1);
                 return 1;
             }
@@ -1286,20 +1515,141 @@ int HandleDialogBox(HWND hwnd, WPARAM wparam, short param_3, HWND param_4)
                         if (DVar8 != UINT_008da548)
                         {
                             UINT_008da548 = DVar8;
-                            FUN_0044fbd0();
+                            //FUN_0044fbd0();
                             return 1;
                         }
                         break;
                     case 0x3e9:
-                        iVar10 = UINT_008da548 * 0x24;
-                        piVar1 = (int*)(iVar10 + UINT_008db344);
-                        *(DWORD*)(iVar10 + 8 + UINT_008db344) = DVar8;
+                        iVar10 = (LRESULT *)(UINT_008da548 * 0x24);
+                        LRESULT piVar1 = iVar10[(int)UINT_008db344];
+                        iVar10[(int)UINT_008db344 + 8] = DVar8;
                     }
                 }
             }
         }
     }
 }
+
+
+// Registry
+
+unsigned int MoreRegistryStuff(char* param1, LPBYTE filename, unsigned int param3)
+{
+    unsigned int output = 0xffffffff;
+    bool done = false;
+    LSTATUS result;
+    HKEY key;
+    CharLowerBuffA(param1, strlen(param1));
+    LPSTR subKey;
+    if (RegOpenKeyA(HKEY_CLASSES_ROOT, "clsid", &key) == ERROR_SUCCESS)
+    {
+        unsigned int depth = 0;
+        do 
+        {
+            do
+            {
+                if (done) goto Exit;
+                result = RegEnumKeyA(key, depth, subKey, 0x200);
+                depth += 1;
+                if (result != ERROR_SUCCESS) goto Exit;
+                CharLowerBuffA(subKey, strlen(subKey));
+            } while (strcmp(subKey, param1) != 0);
+            HKEY newKey;
+            HKEY newSubKey;
+            if (RegOpenKeyExA(key, subKey, 0, KEY_READ, &newKey) == ERROR_SUCCESS)
+            {
+                if (RegOpenKeyExA(newKey, "InprocServer32", 0, KEY_READ, &newSubKey) == ERROR_SUCCESS)
+                {
+                    DWORD local_20 = param3;
+                    DWORD local_24 = 1;
+                    if (RegQueryValueExA(newSubKey, NULL, NULL, &local_24, filename, &local_20) == ERROR_SUCCESS)
+                    {
+                        OFSTRUCT local_ac;
+                        memset(&local_ac, 0, 0x88);
+                        local_ac = 0x88;
+                        if (OpenFile(filename, &local_ac, OF_EXIST))
+                        {
+                            output = 0;
+                        }
+                    }
+                    RegCloseKey(newSubKey);
+                }
+                RegCloseKey(newKey);
+            }
+            done = true;
+        } while (result == ERROR_SUCCESS);
+    Exit:
+        RegCloseKey(key);
+    }
+    return output;
+}
+
+int* ReadCLSIDKey(HKEY hkey, LPCSTR subKey, int param3, char* param4)
+{
+    PHKEY result;
+    HKEY local_c;
+    char* Dst = param4;
+    if (param4 == nullptr)
+    {
+        if (RegOpenKeyExA(hkey, subKey, 0, KEY_READ, result) == ERROR_SUCCESS)
+        {
+            DWORD keyType = 1;
+            LPBYTE data;
+            if ((RegQueryValueExA(local_c, "clsid", NULL, &keyType, data, (LPDWORD)&param4) == ERROR_SUCCESS))
+            {
+                
+            }
+        }
+    }
+}
+
+////////////////////////////////////////////////////////
+// Network
+
+bool StringAddressToBinaryRepresentation(char* stringAddress, unsigned long* out_addr)
+{
+    unsigned char local_14, local_10, local_c, local_8;
+    int occurences = sscanf(stringAddress, "%d.%d.%d.%d", &local_14, &local_10, &local_c, &local_8);
+    if (occurences < 4)
+        return false;
+
+    unsigned long binary = inet_addr(stringAddress);
+    *out_addr = binary;
+    return binary != INADDR_NONE;
+}
+
+void FUN_0062f54e(char* stringAddress, int param_2, unsigned short extraout_var)
+{
+    HANDLE local_c;
+    bool bVar1 = StringAddressToBinaryRepresentation(stringAddress, (unsigned long*)local_c);
+    if (((extraout_var << 1) | bVar1) == 0)
+    {
+        char* local_40c = (char*)malloc(0x400);
+        local_c = WSAAsyncGetHostByName(NULL, 0, stringAddress, local_40c, 0x400);
+
+        unsigned int timePassed;
+        unsigned int start = GetMiliseconds();
+        unsigned int now;
+
+        // Waiting for response
+        while (local_40c == 0)
+        {
+            now = GetMiliseconds();
+            timePassed += now - start;
+            if (AsyncMaxWaitTime_00684b18 <= timePassed)
+            {
+                WSACancelAsyncRequest(local_c);
+                return;
+            }
+            MaybeSleep(10);
+            start = now;
+        }
+    }
+}
+
+unsigned int UINT_006d6814;
+unsigned int DAT_0069c138;
+int* UINT_008da560;
 
 // Creating setup window
 //
@@ -1322,7 +1672,7 @@ int CreateSetupWindow(astruct_140 *param_1, HINSTANCE hInst, int showSetup, int 
     HICON_008da544 = LoadIconA(hInst, (LPCSTR)0x66);
     uVar7 = UINT_008da540;
     if (iVar == 0)
-        FUN_00450aa0();
+        //FUN_00450aa0();
 
     iVar = *(unsigned int*)(uVar7 + 4);
     uVar13 = UINT_006d6900;
@@ -1370,7 +1720,7 @@ int CreateSetupWindow(astruct_140 *param_1, HINSTANCE hInst, int showSetup, int 
             if (HWND_008da56c == NULL)
             {
                 // What
-                **(*(int*)UINT_008da560 + 0x1c)();
+                **(*UINT_008da560 + 0x1c)();
                 UINT_006d6908 = 0;
                 HWND_008da56c = CreateD3DWindow(NULL, hInst, "FlatOut 2", HICON_008da544, cursor, *(astruct_110**)(iVar17 + 4), UINT_006d68f4, UINT_006d68fc, iVar & 0xfffffffe);
                 if (HWND_008da56c == NULL)
@@ -1402,19 +1752,21 @@ int CreateSetupWindow(astruct_140 *param_1, HINSTANCE hInst, int showSetup, int 
                 break;
             }
         }
-    }
+    } while (false);
 
 }
+
+
 
 // 1 = US, 2 = Germany, not 1 or 2 = Europe
 // Germany got it's own version,
 // Also, my presumably US copy is set to 0, meaning Europe. Changing it after starting the game seems to have no effect.
 unsigned int version_0069c13c = 0;
 
-void FUN_0049180(int param_1)
+void StartGame(int param_1)
 {
     const char* version_string;
-
+    astruct_97* paVar1 = *(astruct_97**)(*int_008e8420 + 4);
     // So glad they used text
     if (version_0069c13c == 1)
     {
@@ -1428,43 +1780,47 @@ void FUN_0049180(int param_1)
     {
         version_string = "VERSION_EUROPE";
     }
-    
-
+    //...
 }
 
-
-
-
-
-class AutoClass24 {
-public:
-
-    int field0_0x0;
-    unsigned int field1_0x4;
-
-    unsigned int FUN_00559b00(undefined4 param_1, int* param_2)
+DWORD GetSeconds()
+{
+    LARGE_INTEGER local_c;
+    LARGE_INTEGER local_14;
+    if (QueryPerformanceCounter(&local_c))
     {
-        int iVar4 = (this->field1_0x4 - this->field0_0x0 >> 2) - 1;
-        if (iVar4 > -1)
-        {
-            int* piVar3 = (int*)(this->field0_0x0 + iVar4 * 4);
-            do
-            {
-                int iVar1 = *piVar3;
-                //iVar2 = FUN_00560d70(iVar1);
-                int iVar2 = 0;
-                if (iVar2 != 0)
-                {
-                    *param_2 = iVar1;
-                    param_2[1] = iVar2;
-                    return (unsigned int)iVar2 >> 8 | 0x1;
-                }
-            } while (iVar4 > -1);
-        }
-        *param_2 = 0;
-        param_2[1] = 0;
-        return (unsigned int)param_2 & 0xffffff00;
+        QueryPerformanceFrequency(&local_14);
+        LONGLONG lVar3 = Int32x32To64(local_c.QuadPart, 1000000);
+        return lVar3 / (lVar3 >> 0x20);
     }
+    return timeGetTime() * 1000;
+}
+
+DWORD GetMiliseconds()
+{
+    return GetSeconds() / 1000;
+}
+
+struct astruct_150 {
+    // 48 undefined bytes at offset 0x0
+    int field_0x30;
+    // 4 undefined bytes at offset 0x34
+    unsigned int field_0x38;
+};
+
+struct astruct_151 {
+    // 16 undefined bytes at offset 0x0
+    char field_0x10;
+    // 53 undefined bytes at offset 0x14
+    char field_0x45;
+    // 2 undefined bytes at offset 0x46;
+    unsigned int field_0x48;
+    undefined4* undefined2actually_0x4C;
+    void* field_0x50;
+    size_t field_0x54;
+    // 4 undefined bytes at offset 0x58
+    unsigned int field_0x5C;
+    unsigned int field_0x60;
 };
 
 // It used to be called neverReferencedAgain, because this next function checks if it's 0,
@@ -1524,9 +1880,6 @@ int SlashConvertString(unsigned char* in_string, int mode, unsigned char* out_st
                         currentChar += ' ';
                     }
                 }
-                // Setting the out_string to point at the address of currentChar, rather than setting the value.
-                // So every character is going to point at currentChar.
-                // Still a little confused
                 out_string = &currentChar;
                 out_string = out_string + 1;
             }
@@ -1584,76 +1937,278 @@ void __cdecl CopyStringToString(char* out_string, char param_2, char* in_string)
     return;
 }
 
-/////////////////////////////////////////////////
-// I know what they do, but I don't know why.
 
-void ClearAStruct42(astruct_42* in_struct)
+
+// Goes along the string until it finds a difference and returns the difference between the characters in integer value.
+int String_Compare(char* string1, char* string2)
 {
-    in_struct->func_0x0 = &PTR_FUN_0067af94;
-    in_struct->field6_0xe4 = 0xf;
-    in_struct->field5_0xe0 = 0;
-    in_struct->field4_0xd0 = 0;
-    in_struct->field1_0x4 = 0;
-    in_struct->field3_0x10 = 0;
-    in_struct->field2_0x8 = 0;
-    // The last three indexes of the dwbuffer2 are important.
-    in_struct->dwbuffer2_0x40[34] = 0;
-    in_struct->dwbuffer2_0x40[32] = 0;
-    in_struct->dwbuffer2_0x40[33] = 0;
-    in_struct->dw1_0xc = 0;
+    char char1, char2;
+    do
+    {
+        char1 = *string1;
+        char2 = *string2;
+        string1 += 1;
+        string2 += 1;
+        if (char1 == NULL) break;
+    } while (char1 == char2);
+    return char1 - char2;
+}
 
-    // It appears to be 2 objects that each have 3 objects, and an ending parameter.
-    in_struct->dwbuffer2_0x40[0] = 0x3F800000;
+// The same as String_Compare except safer.
+int String_Compare_s(char* string1, char* string2, int maxLength)
+{
+    char char1, char2;
+    int iVar3 = 0;
+    do
+    {
+        char1 = *string1;
+        char2 = *string2;
+        string1 += 1;
+        string2 += 1;
+        iVar3 += 1;
+        if (char1 == NULL || char1 != char2) break;
+    } while (iVar3 < maxLength);
+    return char1 - char2;
+}
 
-    in_struct->dwbuffer2_0x40[1] = 0;
-    in_struct->dwbuffer2_0x40[2] = 0;
-    in_struct->dwbuffer2_0x40[3] = 0;
-    in_struct->dwbuffer2_0x40[4] = 0;
+// Honestly not too sure about the why.
+// Same as Compare, it sweeps through until it finds a difference and then returns the difference in value between the characters.
+char String_CompareEnd(char* out_string, char* in_string, int length)
+{
+    if (length > 0)
+    {
+        int difference = in_string - out_string;
+        do
+        {
+            if (*out_string != out_string[difference])
+                return *out_string - out_string[difference];
 
-    in_struct->dwbuffer2_0x40[5] = 0x3F800000;
+            out_string = out_string += 1;
+            length -= 1;
+        } while (length > 0);
+    }
+    return NULL;
+}
 
-    in_struct->dwbuffer2_0x40[6] = 0;
-    in_struct->dwbuffer2_0x40[7] = 0;
-    in_struct->dwbuffer2_0x40[8] = 0;
-    in_struct->dwbuffer2_0x40[9] = 0;
+// They had a GetLength function but quite a lot of functions still chose to do it themselves.
+int String_GetLength(char* in_string)
+{
+    char* tempPtr = in_string;
+    while (*tempPtr != NULL)
+        tempPtr += 1;
 
-    in_struct->dwbuffer2_0x40[10] = 0x3F800000;
+    return tempPtr - in_string;
+}
 
-    in_struct->dwbuffer2_0x40[11] = 0;
-    in_struct->dwbuffer2_0x40[12] = 0;
-    in_struct->dwbuffer2_0x40[13] = 0;
-    in_struct->dwbuffer2_0x40[14] = 0;
+// Simple copy from one string to another.
+// Both pointers will end up pointing at the end of the string, so it returns
+// the original pointer to the out_string.
+char * String_SimpleCopy(char* out_string, char* in_string)
+{
+    char* original = out_string;
+    char current;
+    do
+    {
+        current = *in_string;
+        *out_string = current;
+        out_string += 1;
+        in_string += 1;
+    } while (current != NULL);
+    return original;
+}
 
-    in_struct->dwbuffer2_0x40[15] = 0x3F800000;
-    in_struct->dwbuffer2_0x40[16] = 0x3F800000;
+// Just like SimpleCopy except has a length, makes it a bit safer too.
+char* String_CopySubstring(char* out_string, char* in_string, int length)
+{
+    char* original = out_string;
+    char current;
+    do
+    {
+        if (length == 0)
+        {
+            return original;
+        }
+        current = *in_string;
+        *out_string = current;
+        out_string += 1;
+        in_string += 1;
+        length -= 1;
+    } while (current != NULL);
+    return original;
+}
 
-    in_struct->dwbuffer2_0x40[17] = 0;
-    in_struct->dwbuffer2_0x40[18] = 0;
-    in_struct->dwbuffer2_0x40[19] = 0;
-    in_struct->dwbuffer2_0x40[20] = 0;
+// Copies the in_string to the string after the out_string.
+// Finds the first NULL in the out_string and starts there.
+char* String_CopyTheStringAfterTheString(char* out_string, const char* in_string)
+{
+    char* original = out_string;
+    // Sweep through the first string.
+    for (; *out_string != NULL; out_string++) {}
 
-    in_struct->dwbuffer2_0x40[21] = 0x3F800000;
+    char current;
+    do
+    {
+        current = *in_string;
+        *out_string = current;
+        out_string++;
+        in_string++;
+    } while (current != NULL);
+    return original;
+}
 
-    in_struct->dwbuffer2_0x40[22] = 0;
-    in_struct->dwbuffer2_0x40[23] = 0;
-    in_struct->dwbuffer2_0x40[24] = 0;
-    in_struct->dwbuffer2_0x40[25] = 0;
+// Just like CopyTheStringAfterTheString except with a length, makes sure to add a terminator.
+char* String_CopyTheSubstringAfterTheString(char* out_string, char* in_string, int length)
+{
+    char* original = out_string;
+    if (length)
+    {
+        for (; out_string != NULL; out_string++) {}
+        
+        char current;
+        do
+        {
+            current = *in_string;
+            *out_string = current;
+            if (current == NULL)
+                return original;
 
-    in_struct->dwbuffer2_0x40[26] = 0x3F800000;
+            out_string++;
+            in_string++;
+            length--;
+        } while (length);
+        *out_string = NULL;
+    }
+    return original;
+}
 
-    in_struct->dwbuffer2_0x40[27] = 0;
-    in_struct->dwbuffer2_0x40[28] = 0;
-    in_struct->dwbuffer2_0x40[29] = 0;
-    in_struct->dwbuffer2_0x40[30] = 0;
+// I just checked, it's pretty much exactly how Microsoft wrote tolower() except 'A' - 'a' is precalculated, happens to be the space character.
+char Char_ToLowercase(char theChar)
+{
+    if (theChar > 64 && theChar < 91)
+        theChar += ' ';
+    return theChar;
+}
 
-    in_struct->dwbuffer2_0x40[31] = 0x3F800000;
+const char* s_no_value_006541c = "no value";
+
+const char* Types_0065284c[] =
+{
+    "nil"
+    "boolean",
+    "userdata",
+    "number",
+    "string",
+    "table",
+    "function",
+    "userdata",
+    "thread",
+    "proto",
+    "upval"
+};
+
+const char* StringTypeFromInt(astruct_114* param_1, int type)
+{
+    if (type == -1)
+        return s_no_value_006541c;
+    else
+        return Types_0065284c[type];
+}
+
+
+/////////////////////////////////////////////////
+// AutoClass 9 / PropertyDb
+
+// AutoClass 9
+// I'm pretty sure this is the Lua interpreter.
+class AutoClass9 {
+public:
+    AutoClass9* FUN_00557fe0(char* param_1, char param_2)
+    {
+        char* pcVar2 = param_1;
+        char cVar1;
+        // Counts the length of the string to make sure it's more than one character long
+        do {
+            cVar1 = *pcVar2;
+            pcVar2 = pcVar2 + 1;
+        } while (cVar1 != '\0');
+
+        if (pcVar2 == param_1 + 1)
+            return this;
+
+        cVar1 = *param_1;
+        int iVar4 = 0;
+        int iVar5 = 0;
+        if (cVar1 != '\0')
+        {
+            pcVar2 = param_1;
+            do {
+                if (cVar1 == '.') break;
+                iVar5 += 1;
+                pcVar2[(int)(acStack_100 + -(int)param_1)] = cVar1;
+                cVar1 = pcVar2[1];
+                iVar4 += 1;
+                pcVar2 = pcVar2 + 1;
+            } while (cVar1 != '\0');
+        }
+        cVar1 = param_1[iVar4];
+        acStack_100[iVar5] = NULL;
+        if (cVar1 == '.')
+            iVar4 += 1;
+
+        AutoClass9* this_00 = FUN_00557e60(this);
+        if (this_00 == NULL)
+        {
+            this_00 = PropertyDb_AccessProperty();
+            if (this_00 == NULL)
+            {
+                if (param_2 == NULL)
+                    return NULL;
+                this_00 = PropertyDb_RuntimeTables();
+            }
+        }
+        AutoClass9 *pAVar3 = this_00->FUN_00557fe0(param_1 + iVar4, param_2);
+        return pAVar3;
+    }
+
+    void AddMappedTable(char* param_1, int* param_2, unsigned int param_3)
+    {
+        AutoClass9* pAVar3 = this->FUN_00557fe0(param_1, NULL);
+        int iVar12 = 0;
+        int iVar8 = *param_2;
+        int* piVar4 = param_2;
+        int* piVar1;
+        while (iVar8 != 0)
+        {
+            piVar1 = piVar4 + 3;
+            piVar4 = piVar4 + 3;
+            iVar12 += 1;
+            iVar8 = *piVar1;
+        }
+
+        if ((pAVar3 == NULL || ))
+    }
+
+};
+
+int PropertyDb_AccessProperty(char* in_EAX)
+{
+    char* leftBracket = strstr(in_EAX, "[");
+    char* rightBracket = strstr(in_EAX, "]");
+    char* tempPtr = in_EAX;
+    do
+    {
+        tempPtr = tempPtr + 1;
+    } while (*tempPtr != NULL);
+    if (leftBracket == NULL || rightBracket == NULL || rightBracket <= leftBracket || (rightBracket + -(int)in_EAX != tempPtr + (-1 - (int)(in_EAX + 1))))
+    {
+    }
 }
 
 
 /////////////////////////////////////////////////
 // File System
 
-void LoadBinaryDatabase(unsigned char *in_EAX)
+void LoadBinaryDatabase(char *flags)
 {
     int* piVar1;
     int* piVar5;
@@ -1669,10 +2224,10 @@ void LoadBinaryDatabase(unsigned char *in_EAX)
     free(MemoryPointer);
     MemoryPointer = NULL;
     memAllocationSize = 0;
-    cVar2 = FUN_0054c610('\0', in_EAX);
+    cVar2 = FUN_0054c610('\0', (unsigned char *)flags);
     if (cVar2 != '\0')
     {
-        FUN_0054c3b0(in_EAX, 9);
+        FUN_0054c3b0(flags, 9);
         iVar3 = **(*(int*)local_8 + 0x1c)();
         FUN_0054c5a0((int)&local_28, &iStack_34, 0xc);
         if ((iStack_34 == 0x1a424450) && (iStack_30 == 0x200))
@@ -1710,6 +2265,126 @@ void LoadBinaryDatabase(unsigned char *in_EAX)
     }
     CreateErrorMessageAndDie("Failed to load binary database \'%s\'!");
     return;
+}
+
+void InitOpenBFS(LPCSTR param_1, HANDLE* in_EAX)
+{
+    // I thought it was allocating space for the file,
+    //  but only 548 bytes?
+    void* pvVar2 = malloc(0x224);
+    void* uVar3;
+    if (pvVar2 == NULL)
+        uVar3 = NULL;
+    else
+        OpenBFS(param_1, in_EAX);
+
+    //if (in_EAX[2] == in_EAX[1])
+        //FUN_00434840();
+
+    HANDLE puVar1 = in_EAX[1];
+    in_EAX[1] = (HANDLE)((int)puVar1 + 4);
+
+    return;
+
+}
+
+void FUN_0054c7a0(void ** unaff_EDI)
+{
+    void* pvVar2 = *unaff_EDI;
+    int iVar3 = (int)unaff_EDI[1] - (int)pvVar2 >> 2;
+    int iVar1;
+    if (iVar3 < 4)
+        iVar1 = 3;
+    else
+        iVar1 = iVar3 * 3 >> 1;
+
+    if ((int)unaff_EDI[2] - (int)pvVar2 >> 2 < iVar1)
+    {
+        pvVar2 = realloc(pvVar2, iVar1 * 4);
+        unaff_EDI[2] = (void*)(iVar1 * 4 + (int)pvVar2);
+        *unaff_EDI = pvVar2;
+        unaff_EDI[1] = (void*)((int)pvVar2 + iVar3 * 4);
+    }
+    return;
+}
+
+// ASPI
+
+HMODULE wnaspi_006a32d0;
+FARPROC PTR_GetASPI32SupportInfo_006a32d4;
+FARPROC PTR_SendASPI32Command_006a32d8;
+char CHAR_006a32cc;
+unsigned int UINT_006a328c;
+int INT_006a32e4;
+int INT_007a32e4;
+
+
+unsigned int ASPI_Initialize(char param_1)
+{
+    if (CHAR_006a32cc != '\0')
+        return 0;
+
+    unsigned int* puVar7 = &UINT_006a328c;
+    int errorCode, pvVar5;
+    for (int iVar3 = 8; iVar3 != 0; iVar3 -= 1)
+    {
+        *puVar7 = 0;
+        puVar7 += 1;
+    }
+    INT_007a32e4 = 0;
+    if ((param_1 == '\0') )//&& (uVar2 = FUN_00621944(), uVar2 != NULL))
+    {
+        //PTR_GetASPI32SupportInfo_006a32d4 = FUN_00620525;
+        //PTR_SendASPI32Command_006a32d8 = FUN_00621ea4;
+    }
+    else
+    {
+        puVar7 = &UINT_006a328c;
+        for (int iVar3 = 8; iVar3 != 0; iVar3 -= 1)
+        {
+            *puVar7 = 0;
+            puVar7 += 1;
+        }
+        char* local_804;
+        INT_006a32e4 = 0;
+        String_SimpleCopy(&local_804, "wnaspi32.dll");
+        wnaspi_006a32d0 = LoadLibraryA(&local_804);
+        if (wnaspi_006a32d0 == NULL)
+        {
+            GetSystemDirectoryA(&local_804, 0x7FF);
+            String_CopyTheStringAfterTheString(&local_804, "\\");
+            String_CopyTheStringAfterTheString(&local_804, "wnaspi32.dll");
+            wnaspi_006a32d0 = LoadLibraryA(&local_804);
+            if (wnaspi_006a32d0 == NULL)
+            {
+                errorCode = 1;
+                //pvVar5 = extraout_ECX_01;
+                goto exitPoint;
+            }
+        }
+        PTR_GetASPI32SupportInfo_006a32d4 = GetProcAddress(wnaspi_006a32d0, "GetASPI32SupportInfo");
+        PTR_SendASPI32Command_006a32d8 = GetProcAddress(wnaspi_006a32d0, "SendASPI32Command");
+        if (PTR_GetASPI32SupportInfo_006a32d4 == NULL || PTR_SendASPI32Command_006a32d8 == NULL)
+        {
+            errorCode = 5;
+            //pvVar5 = extraout_ECX_02;
+            goto exitPoint;
+        }
+    }
+    //unsigned int uVar4 = 0;
+    errorCode = (*PTR_GetASPI32SupportInfo_006a32d4)();
+    pvVar5 = errorCode >> 8 & 0xFF;
+    if (pvVar5 != 0x1)
+    {
+        int pvVar8 = pvVar5;
+        //FUN_006205e0((int)pvVar5);
+        //FUN_006218cd(pvVar8);
+        return pvVar5 << 8 | 3;
+    }
+
+exitPoint:
+
+
 }
 
 void OpenBFS(LPCSTR filename, HANDLE* unaff_EDI)
@@ -1758,12 +2433,12 @@ void OpenBFS(LPCSTR filename, HANDLE* unaff_EDI)
     pAVar4 = AC24_008da72c;
     unaff_EDI[1] = bfsFile;
     FUN_0059b60(pAVar4, unaff_EDI, aiStack_10, 0, 0x10);
-    // The file must start with the characters "bfs1"
+    // The file must start with the characters "bfsl"
     if (aiStack_10[0] != 0x31736662)
         CreateErrorMessageAndDie("BFS archive <%s> has invalid id");
 
     unaff_EDI[0x84] = bfsFile;
-    _Size = (int)(HANDLE)(uStack_8 & 0x7FFFFFFF) + 3U & 0xFFFFFFFC;
+    size_t _Size = (int)(HANDLE)(uStack_8 & 0x7FFFFFFF) + 3U & 0xFFFFFFFC;
     unaff_EDI[0x85] = pvStack_4;
     puVar7 = malloc(_Size);
     pAVar4 = AC24_008da72c;
@@ -1818,64 +2493,9 @@ void OpenBFS(LPCSTR filename, HANDLE* unaff_EDI)
     return;
 }
 
-// astruct_142
-struct YetAnotherFile {
-    // 4 undefined bytes at offset 0x0
-    struct ArrayMaybe* rray;
-    undefined4 field8_0x8;
-    // 8 undefined bytes at offset 0xC
-    undefined4 field14_0x14;
-    // 8 undefined bytes at offset 0x18
-    int field23_0x20;
-    int pointerIndex;
-    // 8 undefined bytes at offset 0x28
-    DWORD field30_0x30;
-    // 8 undefined bytes at offset 0x34
-    size_t field42_0x3c;
-};
-
-int __cdecl OpenFile(char** param_1, YetAnotherFile* param_2)
-{
-    char* pcVar1;
-    char** ppcVar2;
-    FILE* pFVar4;
-    void* puVar3;
-    pcVar1 = *param_1;
-    ppcVar2 = (char **)GetItem(param_2->rray, param_2->pointerIndex);
-    if (((unsigned int)ppcVar2[6] & 4) == 0)
-    {
-        if (((unsigned int)ppcVar2[6] & 2) == 0)
-        {
-            if (ppcVar2[5] == NULL)
-            {
-                pFVar4 = fopen(*ppcVar2, "rb");
-                ppcVar2[5] = (char *)pFVar4;
-                if (pFVar4 == NULL)
-                {
-                    puVar3 = malloc(0x14);
-                    if (puVar3 != NULL)
-                    {
-                        *puVar3 = NULL;
-                        puVar3[1] = NULL;
-                        puVar3[2] = NULL;
-                        puVar3[3] = NULL;
-                        puVar3[4] = NULL;
-                        *puVar3 = param_2->field14_0x14;
-                        puVar3[2] = param_2->pointerIndex;
-                        puVar3[1] = 0x80F;
-                        puVar3[3] = 0x900;
-                        FUN_005f4fd0(param_1, pcVar1 + 0x1d4, pcVar1 + 0x1d8);
-                    }
-                }
-            }
-        }
-    }
-}
-
 bool WriteCharToStream(char in_char, FILE* file)
 {
-    int result = fputc(in_char, file);
-    return result != -1;
+    return fputc(in_char, file) != -1;
 }
 
 // Still confused about this one
@@ -1892,16 +2512,36 @@ unsigned int SetFPUCW(unsigned short in_FPUControlWord)
     return copyOfWhat << 2 | in_FPUControlWord;
 }
 
-void* PTR_008e8418;
+typedef void (*funcPtr)(int);
+
+funcPtr PTR_008e8418;
 
 /////////////////////////////////////////////////
 // Startup Sequence
 
 
+LRESULT BasicDlgProc(HWND hWnd, int command, short param_3)
+{
+    if (command == WM_COMMAND)
+    {
+        if (param_3 == 1)
+        {
+            EndDialog(hWnd, 1);
+            return 1;
+        }
+        if (param_3 == 2)
+        {
+            EndDialog(hWnd, 2);
+            return 1;
+        }
+    }
+    return 0;
+}
 
 DWORD Startup(HINSTANCE hInstance, unsigned int param_3, char* flags)
 {
-    g_Instance = hInstance;
+    HINST_008da564 = hInstance;
+    INT_PTR IVar2;
 
     // The random seed is set to the current time
     DWORD seed = timeGetTime();
@@ -1915,7 +2555,7 @@ DWORD Startup(HINSTANCE hInstance, unsigned int param_3, char* flags)
     CoInitializeEx(NULL, 0);
 
     int verCheck = CheckDirectXVersion((LPBYTE*)"4.09.00.0904");
-    if (verCheck == 0 && DialogBoxParamA(hInstance, (LPCSTR)0x83, NULL, g_dlgproc, (0) == (INT_PTR)1)
+    if (verCheck == 0 && (IVar2 = DialogBoxParamA(hInstance, (LPCSTR)0x83, NULL, BasicDlgProc, 0), IVar2 == (INT_PTR)1))
         return 0xffffffff;
 
     // Sets unkn_008da6a0 to 1
@@ -1925,7 +2565,7 @@ DWORD Startup(HINSTANCE hInstance, unsigned int param_3, char* flags)
     strstr(flags, "-binarydb");
     strstr(flags, "-bedit");
 
-    LoadBinaryDatabase();
+    LoadBinaryDatabase(flags);
 
     UINT_0069c2d0 = (unsigned int)&UINT_008d7bb0;
     // Allocating ~131 KB
@@ -1933,7 +2573,7 @@ DWORD Startup(HINSTANCE hInstance, unsigned int param_3, char* flags)
     if (newMem == NULL)
         UINT_008d780c = 0;
     else
-        UINT_008d780c = FUN_0051c520();
+        //UINT_008d780c = FUN_0051c520();
 
     // Allocating 8.2KB
     char** newMem2 = (char **)malloc(0x2008);
@@ -1952,19 +2592,20 @@ DWORD Startup(HINSTANCE hInstance, unsigned int param_3, char* flags)
             ppcVar3 = NULL;
             ppcVar3 = ppcVar3 + 1;
         }
-        FUN_00551090(newMem2);
+        //FUN_00551090(newMem2);
     }
     MEM_008da568 = newMem2;
-    FUN_00550f90(newMem2);
-    FUN_0045lb70(&UINT_0069c128);
-    int iVar1 = FUN_00520cf0();
+    //FUN_00550f90(newMem2);
+    //FUN_0045lb70(&UINT_0069c128);
+    //int iVar1 = FUN_00520cf0();
+    int iVar1 = 1;
 
 
     // From here its starting to seem like a shutdown sequence.
 
 
     if (iVar1 != 0)
-        FreeALotOfMemory();
+        //FreeALotOfMemory();
 
     CoUninitialize();
     if (UINT_008e855c != 0)
@@ -1972,11 +2613,11 @@ DWORD Startup(HINSTANCE hInstance, unsigned int param_3, char* flags)
 
     if (PTR_008e8418 != NULL && UINT_008e855c == 0)
     {
-        *PTR_008e8418(1);
+        (*PTR_008e8418)(1);
         PTR_008e8418 = NULL;
     }
 
-    FUN_0051cdc0();
+    //FUN_0051cdc0();
     newMem = PTR_008da568;
     if (PTR_008da568 != NULL)
     {
@@ -2003,9 +2644,9 @@ void CreateErrorMessageAndDie(const char* message)
 
 void* DoNotCallEver(void *in_mem, int bFree)
 {
-    in_mem = &PTR_LAB_0067b1c0;
+    in_mem = &JMPTABLE_0067b1c0;
     CreateErrorMessageAndDie("Must not be called - ever.");
-    in_mem = &PTR_LAB_0067ad08;
+    in_mem = &JMPTABLE_0067ad08;
     if (bFree)
         free(in_mem);
 
@@ -2095,253 +2736,4 @@ LAB_006026FF:
             return code;
         }
         exit(code);
-}
-
-/////////////////////////////////////////////////
-// Unsure
-
-
-char __fastcall FUN_0054c610(char param_1, unsigned char* in_EAX)
-{
-    int* local_154;
-    unsigned char* local_104;
-    AutoClass24 local_1;
-    if (param_1 > -1 && AC24_008da72c != NULL)
-    {
-        AC24_008da72c->FUN_00559b00(in_EAX, local_154);
-        return;
-    }
-    SlashConvertString(local_104, 0, in_EAX);
-}
-
-unsigned int* FUN_005c07b0(astruct_114* param_1, char* string, unsigned int length)
-{
-    unsigned int* puVar1;
-    unsigned int local_8;
-    unsigned int local_c = length;
-    unsigned int uVar2 = (length >> 5) + 1;
-    for (local_8 = length; uVar2 <= local_8; local_8 -= uVar2)
-        local_c = local_c * 0x20 + (local_c >> 2) + (unsigned int)(byte)string[local_8 - 1] ^ local_c;
-
-    unsigned int* local_14 = *(unsigned int**)(*(int*)param_1[4] + (*(int*)(param_1[4] + 8) - 1U & local_c) * 4);
-    do
-    {
-        if (local_14 == 0)
-        {
-            puVar1 = FUN_005c08b0(param_1, (unsigned int)string, length, local_c);
-            return puVar1;
-        }
-        if (local_14[3] == length)
-        {
-            bool notDoneYet = true;
-            uVar2 = length;
-            char* pcVar3 = string;
-            puVar1 = local_14 + 4;
-            do
-            {
-                if (uVar2 == 0) break;
-                uVar2 -= 1;
-                notDoneYet = *pcVar3 == *puVar1;
-                pcVar3 = pcVar3 + 1;
-                puVar1 = puVar1 + 1;
-            } while (notDoneYet);
-            if (notDoneYet)
-            {
-                // So if 
-                if ((*(byte*)(local_14 + 5) & (*(byte*)(param_1[4] + 0x14) ^ 3) & 3) == 0)
-                {
-                    return local_14;
-                }
-                *(byte*)(local_14 + 5) = *(byte*)(local_14 + 5) ^ 3;
-                return local_14;
-            }
-        }
-        // Setting the pointer to the memory address equal to it's value?
-        local_14 = (unsigned int*)*local_14;
-    } while (true);
-}
-
-astruct_42* FUN_0058e640(void* in_struct, byte param_1)
-{
-    astruct_13* pAVar1;
-    int iVar2;
-    unsigned int* puVar3;
-    unsigned int* puVar4;
-    int* out_pointer;
-    if ((param_1 & 2) == 0)
-    {
-        FUN_0054cfc0((astruct_42*)in_struct);
-        if ((param_1 & 1) != 0)
-        {
-            free(in_struct);
-        }
-        return in_struct;
-    }
-    iVar2 = *(int*)((int)in_struct + -0x10);
-    out_pointer = (int*)(iVar2 * 0xf0 + (int)in_struct);
-    if (iVar2 + -1 > -1)
-    {
-        puVar3 = (unsigned int*)(out_pointer + 0x39);
-        do {
-            out_pointer = out_pointer + -0x3C;
-            puVar4 = puVar3 + -0x3C;
-            *out_pointer = (int)&PTR_FUN_0067af94;
-            if (*puVar4 > 0xf)
-            {
-                paVar1 = FUN_0054c710();
-                FUN_00557650((astruct_12*)puVar3[-0x41], paVar1);
-            }
-            *puVar4 = 0xf;
-            puVar3[-0x3D] = 0;
-            *(unsigned int*)(puVar3 + -0x41) = 0;
-            FUN_0054cc80(out_pointer);
-            iVar2 += -1;
-            puVar3 = puVar4;
-        } while (iVar2 != 0);
-    }
-    if ((param_1 & 1) != 0)
-        free((astruct_42*)((int)in_struct + -0x10));
-    return (astruct_42*)((int)in_struct + -0x10);
-}
-
-int* FUN_005b3d70(astruct_114* param_1, int param_2)
-{
-    int* piVar2;
-    if (param_2 < 1)
-        // Converted -9999 into hex, everything else is in hex
-        if (param_2 < -0x270F)
-        {
-            if (param_2 == -0x2712)
-                piVar2 = param_1->field56_0x44;
-            else if (param_2 == -0x2711)
-            {
-                param_1->field61_0x4c = *(int*)(**(int**)(param_1->field11_0x14 + 4) + 0xc);
-                param_1->field62_0x50 = 5;
-                piVar2 = &param_1->field61_0x4c;
-            }
-            else if (param_2 == -10000)
-                piVar2 = (int*)(param_1->field10_0x10 + 0x5c);
-            else
-            {
-                iVar1 = **(int**)param_1->field11_0x14;
-            }
-        }
-}
-
-
-
-void FUN_0052a170(float* param_1, float* in_EAX)
-{
-    float fVar1 = *param_1;
-    in_EAX[0xf] = 1.0;
-    fVar1 = fVar1 + fVar1;
-    float fVar11 = param_1[1] + param_1[1];
-    float fVar12 = param_1[2] + param_1[2];
-    float fVar10 = fVar1 * param_1[3];
-
-}
-
-// Functions that sweep through strings
-
-void FUN_005b4e70(astruct_114* param_1, int param_2, char* param_3)
-{
-    int* piVar2 = FUN_005b3d70(param_1, param_2);
-    char* local_18 = param_3;
-    char cVar1;
-    do
-    {
-        cVar1 = *local_18;
-        local_18 = local_18 + 1;
-    } while (cVar1 != NULL);
-    unsigned int* local_c = FUN_005c07b0(param_1, param_3, local_18 - (param_3 + 1));
-    FUN_005bc570(param_1, piVar2, (float*)&local_c, (int*)(param_1[2] + -8));
-    param_1[2] = param_1[2] - 8;
-    return;
-}
-
-void __cdecl FUN_005b4790(undefined4* param_1, char* in_string)
-{
-    char currentChar;
-    unsigned int local_14;
-    unsigned char local_d;
-    unsigned int local_c;
-    char* tempPtr;
-    if (in_string == NULL)
-    {
-        // To be solved later
-        //FUN_005b4670();
-    }
-    else
-    {
-        tempPtr = in_string;
-        // Sweeps through until the last character, saving it in currentChar
-        do {
-            currentChar = *tempPtr;
-            tempPtr += 1;
-        } while (currentChar != NULL);
-        // Puts in param_1, the string, and the length of the string.
-        FUN_006b4720(param_1, in_string, tempPtr - ((int)in_string + 1));
-    }
-    return;
-}
-
-void _cdecl FUN_0054ad0(astruct_114* param_1, int param_2, char* param_3)
-{
-    char cVar1;
-    int* piVar2 = FUN_005b3d70(param_1, param_2);
-    char* tempPtr = param_3;
-    do
-    {
-        cVar1 = *tempPtr;
-        tempPtr = tempPtr + 1;
-    } while (cVar1 != NULL);
-
-    unsigned int local_c FUN_005c07b0(param_1, param_3, (int)(local_18 - (param_3 + 1)));
-    FUN_005bc300(param_1, piVar2, &local_c, param_1->field8_0x8);
-    param_1->field8_0x8 = param_1->field8_0x8 + 2;
-    return;
-}
-
-void SetABunchOfData(int in_EAX)
-{
-    if (in_EAX == 0)
-    {
-        DAT_0069ba78 = 0x3F800000;
-        DAT_0069ba7c = 0x3F800000;
-        DAT_0069ba80 = 0;
-        DAT_0069ba84 = 0;
-        DAT_0069ba88 = 0x437F0000;
-        DAT_0069ba8c = 0x437F0000;
-    }
-    else
-    {
-        if (in_EAX != 1)
-        {
-            DAT_0069ba70 = 0x44800000;
-            DAT_0069ba74 = 0x43800000;
-            DAT_0069ba78 = 0x43340000;
-            DAT_0069ba7c = 0x42C80000;
-            DAT_0069ba80 = 0x42F00000;
-            DAT_0069ba84 = 0x42700000;
-            DAT_0069ba88 = 0x40880000;
-            DAT_0069ba8c = 0x40CC0000;
-            return;
-        }
-        DAT_0069ba78 = 0x42AA0000;
-        DAT_0069ba7c = 0x42700000;
-        DAT_0069ba84 = 0x41F00000;
-        DAT_0069ba88 = 0x40CC0000;
-        DAT_0069ba8c = 0x41080000;
-    }
-    DAT_0069ba70 = 0x43C80000;
-    DAT_0069ba74 = 0x43480000;
-    return;
-}
-
-
-
-void FUN_0054c540()
-{
-    astruct_94* unaff_ESI;
-    int* piVar1 = unaff_ESI->field23_0x20;
 }
