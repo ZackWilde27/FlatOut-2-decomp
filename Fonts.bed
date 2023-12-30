@@ -1,0 +1,11 @@
+function AddAllFonts()
+local k,v
+for k,v in pairs(Fonts) do
+    if k ~= "DataPath" then
+        AddFont(k, v.Texture, v.Data, v.TopPadding or 0)
+    end
+end
+end
+SetGlobalFontScale(GlobalFontScale or 1.00)
+AddAllFonts()
+AddAllFonts=nil

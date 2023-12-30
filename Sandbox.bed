@@ -1,0 +1,212 @@
+Queue = {  };
+
+function Queue.new();
+    local s = {
+            _queue={},
+            __index = Queue,
+            setmetatable(s, s)
+            return s
+            }
+end
+
+function Queue:Clear()
+    self.queue={}
+end
+
+function Queue:Push(func, param)
+    table.insert(self._queue, {func=func, param=param})
+end
+
+function Queue:PushFirst(func, param)
+    table.insert(self._queue, 1, {func=func, param=param})
+end
+
+function Queue:Pop()
+    if table.getn(self._queue) > 0 then
+        return table.remove(self._queue, 1)
+    end
+end
+
+function Queue:Empty()
+    if table.getn(self._queue) == 0 then
+        return true
+        end
+    return nil
+end
+
+function Queue:Size()
+    return table.getn(self._queue)
+end
+
+function Queue:CallFirst()
+    if table.getn(self._queue) > 0 then
+        local t=rawget(self.queue, 1)
+
+    if not t.func or type(t.func) ~= "function" then return end
+
+    local param=t.param or {}
+    return t.func(unpack(param))
+end
+
+end
+
+nSandboxes = {}
+
+--//setmetatable(Sandboxes, {__mode="v"})
+
+nSandbox = {}
+
+function Sandbox.GetSandbox(name, environment)
+    local s = Sandboxes[name]
+    if not s then
+        ts = {
+            __name = name,
+            __globals = {},
+            __environment = environment or {},
+            t__index = function(table,key)
+                local value
+                tvalue=_parent.rawget(__environment,key)
+                if value then return value end
+                return _parent[key]
+            end,
+            __newindex = function(table,key,value)
+                t_parent.rawset(__environment,key,value)
+            end,
+
+            t_parent=getfenv(0),
+        }
+        local meta = {
+            t__index = Sandbox,
+        }
+        s.__environment.getglobals = function()
+            local _s=s
+            return Sandbox.GetEnvironment(_s)
+        end
+        setfenv(s.__index,s);
+        setfenv(s.__newindex,s);
+        setmetatable(s.__globals,s);
+        setmetatable(s,meta);
+        Sandboxes[name]=s
+    end
+
+    return s
+
+end
+
+function Sandbox.RemoveSandbox(box)
+    local name=box.__name
+    if not name then return end
+    if Sandboxes[name] then Sandboxes[name]=nil end
+end
+
+function Sandbox:GetEnvironment()
+    return self.__environment
+end
+
+function Sandbox:SetEnvironment(environment)
+    local meta=getmetatable(self)
+    setmetatable(self, nil)
+    self._environment=environment or {}
+
+    setmetatable(self, meta);
+end
+
+function Sandbox:SetSandbox(func)
+    setfenv(func, self._globals);
+end
+
+function Sandbox:ClearGlobals()
+    local meta=getmetatable(self)
+    setmetatable(self, nil)
+    self.__environment={}
+
+    setmetatable(self,meta);
+end
+
+
+
+function Sandbox:DoFile(filename)
+    
+    dofile(filename)
+
+--[[--/*
+    scope=self.__globals --- or getfenv(0)
+
+    local f,err=loadfile(filename);
+    if f then
+        setfenv(f, scope)
+        return f()
+    end
+
+    error(err);
+--]]--*/
+
+end
+
+
+function Sandbox:DoString(string)
+
+    scope=self.__globals
+
+    local f,err=loadstring(string)
+
+    if f then
+        setfenv(f,scope)
+        local ok,err=pcall(f)
+
+        if not ok then
+            error(err)
+            return nil,err
+        end
+        return true
+    end
+
+    error(err)
+end
+
+TRUE = 1
+FALSE = 0
+
+#ifdef _USE_DEBUGLOG_
+
+function LOG(...)
+    local s=string.format(unpack(arg))
+    host.LOG(s)
+end
+
+#else
+
+function LOG(...)
+end
+
+#endif
+
+
+function ERROR(...)
+    local s=string.format(unpack(arg))
+    error(s);
+end
+
+function enum(start,values)
+    local i
+    local enumeration
+
+    if type(start)=="table" then
+        i=0
+        enumeration=start
+    else
+        i=start
+        enumeration=values
+    end
+
+    local r={}
+
+    local k,v
+
+    for k,v in pairs(enumeration) do
+        r[v]=i
+        i=i+1   
+    end
+
+    return r
+end

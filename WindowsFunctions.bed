@@ -1,0 +1,412 @@
+--///////////////////////////////////////////////////////////////////////////
+--// WindowFunctions.bed
+--///////////////////////////////////////////////////////////////////////////
+--// Copyright (c) 2003 Bugbear Entertainment ltd. 
+--// All Rights Reserved.
+--// 
+--// @date 15.4.2003 10:01:58
+--//
+--// @Author Mikko Sivulainen (mikko.sivulainen@bugbear.fi)
+--///////////////////////////////////////////////////////////////////////////
+
+
+---helper functions
+function SAFEPOS(x,y)
+    local t_x = TITLESAFE_X or 0
+    local t_y = TITLESAFE_Y or 0
+    return { t_x+x,t_y+y }
+end
+
+function POS(x,y)
+    return { x,y }
+end
+
+function SIZE(x,y)
+    return { x,y }
+end
+
+function SYSTEMFONT()
+    return wm.GetResource(\"SystemFont\");
+end 
+
+function GETFONT(name)
+    return wm.GetResource(name)
+end
+
+function AddPos(Pos1, Pos2)
+    local x=Pos1[1]
+    local y=Pos1[2]
+    x=x+Pos2[1]
+    y=y+Pos2[2]
+    return POS(x, y)
+end
+
+function AddPosAndMakeSafe(Pos1, Pos2)
+    local x=Pos1[1]
+    local y=Pos1[2]
+    x=x+Pos2[1]
+    y=y+Pos2[2]
+    return SAFEPOS(x, y)    
+end
+
+function MakeSafePos(Pos)
+    return SAFEPOS(Pos[1], Pos[2])
+end
+
+
+
+---enums
+
+DIRECTION = enum{
+        UPDOWN,
+        LEFTRIGHT,
+}
+
+
+
+
+
+wm._Menu={}
+wm._ActiveMenu={}
+--setmetatable(wm._Menus,{ __mode =\"k\" })
+
+
+
+function wm.LoadMenu(menuname,filename)
+    local sandbox=Sandbox.GetSandbox(menuname)
+    
+    local env=sandbox:GetEnvironment()
+    env.menuself=menuname
+    
+
+    wm._Menu[menuname]=sandbox
+    
+    return sandbox:DoFile(filename)
+end
+
+
+function wm.GetMenu(menuname)
+    local m=wm._Menu[menuname] or ERROR(\"wm.GetMenu: menu \'%s\' not found\",menuname)
+    return m
+end
+
+
+function wm.DeleteMenu(menuname)
+    wm._Menu[menuname]=nil
+    collectgarbage();
+end
+
+
+function wm.DeleteAll()
+    wm._Menu={}
+    
+    collectgarbage();
+end
+
+
+function wm.Activate(win)
+    local i
+    for i=1,table.getn(wm._ActiveMenu) do
+        if wm._ActiveMenu[i] == win then return end
+    end
+
+    wm.ActivateWindow(win)
+    table.insert(wm._ActiveMenu,win)
+end
+
+
+function wm.Deactivate(win)
+    local k,v
+    for k,v in pairs(wm._ActiveMenu) do
+        if win == v then
+            wm.DeactivateWindow(win)
+            wm.ActiveMenu[k]=nil
+            return
+        end
+    end
+end
+
+function wm.ClearActive()
+    local k,v
+    for k,v in pairs(wm._ActiveMenu) do
+        wm.Deactivate(v)
+    end
+    wm.ActiveMenu={}
+    collectgarbage();
+end
+
+
+function wm.ActivateMenu(menuname)
+    local menu=wm.GetMenu(menuname)
+
+-----   wm.ClearActive();
+    local env=menu:GetEnvironment()
+
+    LOG("activatemenu %s", menuname)
+
+
+    if env.Init then
+        env.Init()
+    end
+
+    --windows to be activated
+    local win=menu:GetEnvironment().ActiveWindows
+
+    if not win then LOG("no activated windows") return end
+
+    local k,v
+    for k,v in pairs(win) do
+        wm.Activate(v)
+    end
+
+    wm.EnterMenu(menuname);
+
+
+end
+
+function wm.DeactivateMenu(menuname)
+    local menu=wm.GetMenu(menuname)
+
+    local win=menu:GetEnvironment().ActiveWindows
+
+    local k,v
+    for k,v in pairs(win) do
+        wm.Deactivate(v)    
+    end
+end
+
+
+
+-----------menu generation
+
+
+function wm._ParseWindow(menu,parent,window)
+
+    local w
+
+
+    local constructor=window.Type
+
+
+    if not constructor then
+        LOG("window %s doesn't have type", window.Name or "unnamed")
+        return nil
+    end
+
+    window.Type=nil
+        
+    --inherit parameters from parent
+    if parent then
+
+        if not window.Font then
+            window.Font=parent.Font
+        end
+
+        window.Parent=parent
+    end
+
+    local k,v
+
+    ---get defined actions
+    local actions = {
+        onAction = 0,
+        onShow = 0,
+        onHide = 0
+        onInit = 0
+    }
+    for k,v in pairs(actions) do
+        if window[k] then
+            actions[k]=window[k] 
+            window[k] = nil
+        end
+    end
+
+
+    local childs
+    if window.Childs then
+        childs=window.Childs
+        window.Childs = nil
+    end
+
+    w=constructor(window)
+
+    --set actions back
+    for k,v in pairs(actions) do
+        if type(v) == "function" then
+            w[k]=v
+        end
+    end
+
+
+    if not childs then return w end
+
+    for k,v in pairs(childs) do
+        wm._ParseWindow(menu, w, v)
+    end
+
+    return w
+end
+
+
+
+function wm.GenerateMenu(menuname, template)
+
+    LOG("GenerateMenu: Creating menu %s...",menuname)
+
+    local menu=Sandbox.GetSandbox(menuname)
+    menu:GetEnvironment().ActiveWindows={}
+
+    local parent
+    local itemname, item
+
+    for itemname,item in pairs(template) do
+        if type(item) == "table" then
+            LOG("item %s",itemname)
+            menu:GetEnvironment().ActiveWindows[itemname]=wm._ParseWindow(menu,parent,item)
+        end
+    end
+
+    LOG("GenerateMenu: Menu created.")
+    collectgarbage()
+end
+
+
+-- The listbox params for CreateSingleColumnsListBox has the following structure
+--[[--/*
+local listboxParams={
+    ListBoxTemplate={},
+    Left=0,
+    Top=0,
+    LeftPadding=0,
+    RightPadding=0,
+    TopPadding=0,
+    BottomPadding=0,
+    RowWidth=100,
+    RowHeight=16,
+    RowPadding=0,
+    RowTemplate={},
+    RowTemplateType="Button",
+    RowTemplateCust=function(Row, RowNr)
+    end,
+    NumRows=1,
+}
+--]]--*/
+
+function CreateSingleColoumnListBox(ListBoxParams)
+    local params=ListBoxParams
+
+    local width=params.LeftPadding + params.RowWidth + params.RightPadding
+    local height=params.TopPadding
+    height=height + params.RowHeight * params.NumRows
+    height=height + params.RowPadding * (params.NumRows - 1)
+    height=height + params.BottomPadding
+
+    if params.ListBoxTemplate.Parent==nil then
+        params.ListBoxTemplate.Position=SAFEPOS(params.Left, params.Top)
+    else
+        params.ListBoxTemplate.Position=POS(params.Left, params.Top)
+    end
+        
+    params.ListBoxTemplate.Size=SIZE(width, height)
+
+    local listBox=ListBox(params.ListBoxTemplate)
+
+    params.RowTemplate.Parent=listBox
+
+    local y=params.TopPadding
+    params.RowTemplate.Size=SIZE(params.RowWidth, params.RowHeight)
+
+    for i=1, params.NumRows do
+        params.RowTemplate.Position=POS(params.LeftPadding, y)
+        local row=addchild(_G[params.RowTemplateType] (params.RowTemplate))
+        params.RowTemplateCust(row, i)
+        y=y + params.RowPadding + params.RowHeight
+    end
+
+    return listBox
+end
+
+
+-- The listbox params for CreateDoubleColoumnListBox has the following structure
+--[[--/*
+local listboxParams={
+    ListBoxTemplate={},
+    Left=0,
+    Top=0,
+    LeftPadding=0,
+    RightPadding=0,
+    TopPadding=0,
+    BottomPadding=0,
+    RowWidth=100,
+    RowHeight=16,
+    RowPadding=0,
+    RowTemplate={},
+    RowTemplateType="Button",
+    RowTemplateCust=function(Row, RowNr)
+    end,
+    NumRows=1,
+    Coloumns={
+        [1]={
+        Name="coloumn1", -- _row# is added
+        ColoumnTemplate={},
+        ColoumnTemplateType="Button"
+        ColoumnTemplateCust=function(Coloumn, RowNr, ColoumnNr)
+        end
+        }
+    }
+}
+    --]]--*/
+
+
+function CreateMultiColoumnListBox(ListBoxParams)
+    local params=ListBoxParams
+
+    local width=params.LeftPadding + params.RowWidth + params.RightPadding
+    local height=params.TopPadding
+    height=height + params.RowHeight * params.NumRows
+    height=height + params.RowPadding * (params.NumRows - 1)
+    height=height + params.BottomPadding
+
+    if params.ListBoxTemplate.Parent==nil then
+        params.ListBoxTemplate.Position=SAFEPOS(params.Left, params.Top)
+    else
+        params.ListBoxTemplate.Position=POS(params.Left, params.Top)
+    end
+
+    params.ListBoxTemplate.Size=SIZE(width, height)
+
+    local listBox=ListBox(params.ListBoxTemplate)
+    
+    params.RowTemplate.Parent=listBox
+
+    local y=params.TopPadding
+    params.RowTemplate.Size=SIZE(params.RowWidth, params.RowHeight)
+
+    local numColoumns=table.getn(params.Coloumns)
+    for i=1, params.NumRows do
+        params.RowTemplate.Position=POS(params.LeftPadding, y)
+        local row=addchild(_G[params.RowTemplateType] (params.RowTemplate))
+        params.RowTemplateCust(row, i)
+
+        for j=1, numColoumns do
+            local coloumn=params.Coloumns[j]
+            coloumn.ColoumnTemplate.Parent=row
+            coloumn.ColoumnTemplate.Name=coloumn.Name..string.format("_row%i", i)
+            local coloumncont=addchild(_G[coloumn.ColoumnTemplateType] (coloumn.ColoumnTemplate))
+            coloumn.ColoumnTemplateCust(coloumncont, i, j)
+        end
+
+        y=y + params.RowPadding + params.RowHeight
+    end
+
+    return listBox
+end
+
+
+
+
+
+
+
+
+
