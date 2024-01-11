@@ -1,24 +1,12 @@
 // FlatOut 2 Decompilation
 
-// So here's what I've learned using Cheat Engine:
-//
-// 0x37CB2A4 and 0x37CB325 are 4-byte integers, counting up during the game, like a timer or something.
-// I've found that these values are set rather than incremented, because I can't override the value.
-//
-// Things that I have tried overriding and nothing happened:
-// 
-// 0x6D6AE0 through 0x6D6BE8 is related to the currently selected car when choosing one
-//
-// When choosing a car, 0x6D69D8 through 0x6D6A0B flip between two different states based on the car.
-//
-// The name of the currently playing song is printed at 0x6D6D50.
-//
+// This is a decompilation of the GOG version of Flatout 2.
+// As far as I'm aware, the DRM is the only difference between versions, they share jump tables, function locations, and every variable that I've checked so far does the same thing.
+
+// I had a section about variables I had found with Cheat Engine but I've realized that their location is random, so it wasn't really useful anyways.
 
 // Bugbear used Visual Studio 2003 aka Visual Studio 6, which means we know the IDE, compiler, all that. But finding a copy these days is difficult.
-
-// I was forced to replace all string functions with the safe counterpart in order for it to compile.
-
-// Originally I made my own names for globals, but I'm now including the address to make investigating easier.
+// To remove the warnings about the unsafe string functions, add _CRT_SECURE_NO_WARNINGS to the Preprocessor definitions under Properties -> C/C++ -> Preprocessor
 
 // I don't think these are included but hey
 #include <stdio.h>
@@ -75,10 +63,15 @@
 #define uchar unsigned char
 #define ulonglong unsigned long long
 
+#define cchar const char
+
 #define undefined1 unsigned char
 #define undefined2 unsigned short
 #define undefined4 unsigned int
-#define undefined8 unsigned long
+// I thought a long was 8 bytes, but that's not the case on Windows.
+// long and int are the same size? Why is it a 'long' then?
+#define undefined8 unsigned long long
+
 
 /////////////////////////////////////////////////
 // Variables
@@ -125,7 +118,7 @@ uint UINT_006d68f0;
 
 void* PTR_LAB_007a9e4[5];
 
-unsigned short FPUConW_008d781c;
+ushort FPUConW_008d781c;
 
 uint UINT_008d780c;
 uint UINT_008d7bb0;
@@ -203,7 +196,8 @@ const char* Funcs_00652918[] =
 // Structs
 
 // astruct_1
-struct ArrayMaybe {
+struct ArrayMaybe
+{
 	INT count;
 	// 4 undefined bytes at offset 0x4
 	INT lenOfItem;
@@ -211,14 +205,14 @@ struct ArrayMaybe {
 	INT memLoc;
 };
 
-// Returns the memory address of an item in an array, or 0.
+// Returns the memory address of an item in an array, or NULL.
 int GetItem(ArrayMaybe* rray, int index)
 {
 	if ((index > -1) && (index < rray->count))
 	{
 		return rray->lenOfItem * index + rray->memLoc;
 	}
-	return 0;
+	return NULL;
 }
 
 struct astruct_42 {
@@ -256,24 +250,6 @@ struct astruct_110 {
 	undefined4 field4_0x9c;
 	undefined4 field5_0xa0;
 	uint field6_0xa4;
-};
-
-struct astruct_114
-{
-	// 8 undefined bytes at 0x0
-	BYTE field7_0x6;
-	// 1 undefined byte at 0x7
-	int* field8_0x8;
-	int field9_0xc;
-	int field10_0x10;
-	int field11_0x14;
-	// 32 undefined bytes at 0x18
-	short field12_0x34;
-	// 16 undefined bytes at 0x36
-	int* field56_0x44;
-	// 4 undefined bytes at 0x48
-	int field61_0x4c;
-	int field62_0x50;
 };
 
 struct astruct_138
@@ -382,7 +358,7 @@ struct Settings {
 
 struct Settings Settings;
 
-void CreateErrorMessageAndDie(const char* message);
+void CreateErrorMessageAndDie(const char* message, ...);
 
 /////////////////////////////////////////////////
 // Classes
@@ -545,8 +521,8 @@ public:
 	}
 
 	// If mode is 1, It'll just set the file pos with no fuss.
-	// If mode is 2, It'll treat the file pos relative to the end going backwards.
-	// If mode is 0, 
+	// If mode is 2, It'll treat the file pos relative to the end.
+	// If mode is 0, checks a flag in the attributes and if it's set, read from the file in, a way.
 	void FileObject_SetFilePos(int newPos, int mode)
 	{
 		if (mode == 0)
@@ -582,6 +558,8 @@ public:
 		FlushFileBuffers(this->handle);
 	}
 
+	// This would make sense if the filePos was private, but it has to be public to be accessed by the FileObject_ClearEAX() function.
+	// It might not be a C++ class anyways so did they go through the trouble of integrating public/private distinction in their own class?
 	char* FileObject_GetFilePosButLikeWhy()
 	{
 		return this->filePos;
@@ -634,6 +612,8 @@ void __fastcall FileObject_ClearEAX(FileObject* in_EAX)
 
 
 
+
+
 /////////////////////////////////////////////////
 //
 // Strings
@@ -671,12 +651,14 @@ int SlashConvertString(uchar* in_string, int mode, uchar* out_string)
 	if (mode == 0)
 	{
 		tempPtr = in_string;
-		// Getting the length of the string.
+
+		// Counts the length of the string.
 		do
 		{
 			currentChar = *tempPtr;
 			tempPtr = tempPtr + 1;
 		} while (currentChar != NULL);
+
 		lenOfData = (int)tempPtr - ((int)in_string + 1);
 
 		if (lenOfData)
@@ -794,6 +776,9 @@ char String_CompareEnd(char* out_string, char* in_string, int length)
 	return NULL;
 }
 
+// They have a String_GetLength function but I can't think of a situation where somebody utilized it.
+// Did the person who wrote this forget to tell anyone else about it?
+// Maybe this was written later and I've only decompiled the older functions?
 int String_GetLength(char* in_string)
 {
 	char* tempPtr = in_string;
@@ -842,6 +827,7 @@ char* String_CopySubstring(char* out_string, char* in_string, int length)
 
 // Appends the in_string to the end of the out_string.
 // Finds the first NULL in the out_string and starts there.
+// It returns the starting pointer to the out_string, but my own experimenting tells me that the original isn't modified anyways, the function is given a copy of the pointer.
 char* String_Append(char* out_string, const char* in_string)
 {
 	char* original = out_string;
@@ -890,7 +876,7 @@ char* String_AppendSubstring(char* out_string, char* in_string, int length)
 void __cdecl ComplicatedCopyString(char* out_string, char param_2, char* in_string)
 {
 	char* _Dest = out_string;
-	strncpy_s(_Dest, 0x100, in_string, 0x100);
+	strncpy(_Dest, in_string, 0x100);
 	_Dest[0xff] = NULL;
 	_Dest[0x430] = param_2;
 	return;
@@ -900,7 +886,7 @@ void static CopyStringToPointerToString(char** out_string, const char* in_string
 {
 	char* _Dest;
 	_Dest = *out_string;
-	strncpy_s(_Dest, 0x100, in_string, 0x100);
+	strncpy(_Dest, in_string, 0x100);
 	_Dest[0xFF] = NULL;
 	return;
 }
@@ -911,31 +897,6 @@ char Char_ToLowercase(char theChar)
 	if (theChar > 64 && theChar < 91)
 		theChar += ' ';
 	return theChar;
-}
-
-const char* s_no_value_006541c = "no value";
-
-const char* Types_0065284c[] =
-{
-	"nil"
-	"boolean",
-	"userdata",
-	"number",
-	"string",
-	"table",
-	"function",
-	"userdata",
-	"thread",
-	"proto",
-	"upval"
-};
-
-const char* StringTypeFromInt(astruct_114* param_1, int type)
-{
-	if (type == -1)
-		return s_no_value_006541c;
-	else
-		return Types_0065284c[type];
 }
 
 const char* StringList_00681888[256] =
@@ -980,7 +941,24 @@ void AddStringToList(int index, const char* newString)
 	return;
 }
 
+// Apparently these aren't strings, but they are treated like them.
+// Sweeps through as if it's a string, but when it does the comparison it casts both of them to integers with no conversion, so it'll compare 4 characters each time.
+bool String_CompareAsIntegers(int* ints1, int* ints2)
+{
+	bool equal = true;
+	int iVar1 = 4;
+	do
+	{
+		if (iVar1 == 0)
+			return equal;
 
+		iVar1--;
+		equal = *ints1 == *ints2;
+		ints1++;
+		ints2++;
+	} while (equal);
+	return equal;
+}
 
 
 /////////////////////////////////////////////////
@@ -994,7 +972,7 @@ void AddStringToList(int index, const char* newString)
 // Also, my presumably US copy is set to 0, meaning Europe.
 uint version_0069c13c = 0;
 
-// I don't know if it's possible to change the value fast enough that the german intro video plays, but you can wait on the title screen to see the german version of the attract demo.
+// I don't know if it's possible to change the value fast enough that the german intro video plays, but you can wait on the title screen to see the german version of the attract video.
 // If set to Germany in a US or Europe copy, the game will crash when loading into a map because it can't find the ragdoll models.
 
 
@@ -1021,6 +999,7 @@ void StartGame(int param_1)
 void (*PTR_008e8418)(int);
 
 
+// This could be the real WinMain, there's no prevInstance but it's deprecated anyways so that would make sense.
 DWORD Startup(HINSTANCE hInstance, uint param_3, char* flags)
 {
 	HINST_008da564 = hInstance;
@@ -1044,7 +1023,7 @@ DWORD Startup(HINSTANCE hInstance, uint param_3, char* flags)
 	// Sets unkn_008da6a0 to 1
 	SetFPUCW(FPUConW_008d781c);
 
-	// Unused flags
+	// Unused flags as far as I'm aware
 	strstr(flags, "-binarydb");
 	strstr(flags, "-bedit");
 
@@ -1093,7 +1072,7 @@ DWORD Startup(HINSTANCE hInstance, uint param_3, char* flags)
 
 		CoUninitialize();
 	if (UINT_008e855c != 0)
-		UINT_008e855c -= 1;
+		UINT_008e855c--;
 
 	if (PTR_008e8418 != NULL && UINT_008e855c == 0)
 	{
@@ -1139,8 +1118,9 @@ uint UINT_00684b24 = -1;
 uint* PTR_UINT_00684570 = &UINT_00684b20;
 
 // Loads the sound module and sets UINT_00687984 to either 7, 8, or 9 based on how much was done.
-// If just the sound library was loaded, it'll be 7
-// If 
+// If the sound library did not load, it'll try to load DirectDraw, and if that works, it'll be 7
+// If the sound library loaded but D3D9 did not, it'll be 8
+// If both the sound library and D3D9 loaded, it'll be 9
 void LoadDirectSoundAndDrawLibrary()
 {
 	if (DSoundModule_006a8598 == NULL)
@@ -1170,15 +1150,14 @@ void LoadDirectSoundAndDrawLibrary()
 		else
 		{
 			UINT_00687984 = 8;
-			char local_404[0x104];
-			UINT uVar1 = GetSystemDirectoryA(local_404, 0x104);
-			if (uVar1 != NULL)
+			char systemDir[0x104];
+			if (GetSystemDirectoryA(systemDir, 0x104) != 0)
 			{
-				char local_204;
-				String_SimpleCopy(&local_204, local_404);
-				String_Append(&local_204, "\\d3d9.dll");
-				FILE** ppFVar2 = NULL;//FUN_0061f9bc(&local_204, NULL, 0);
-				if (ppFVar2 != NULL)
+				char fileDir[0x10C];
+				String_SimpleCopy(fileDir, systemDir);
+				String_Append(fileDir, "\\d3d9.dll");
+				FILE** file = NULL;//FUN_0061f9bc(fileDir, NULL, 0);
+				if (file != NULL)
 				{
 					//OpenDLLFile(ppFVar2);
 					UINT_00687984 = 9;
@@ -1220,12 +1199,14 @@ uint ASPI_Initialize(char param_1)
 	}
 	else
 	{
+		// Clearing an 8-byte buffer
 		puVar7 = &UINT_006a328c;
-		for (int iVar3 = 8; iVar3 != 0; iVar3 -= 1)
+		for (int iVar3 = 8; iVar3 != 0; iVar3--)
 		{
 			*puVar7 = 0;
 			puVar7 += 1;
 		}
+
 		char* local_804;
 		INT_006a32e4 = 0;
 		String_SimpleCopy(local_804, "wnaspi32.dll");
@@ -1339,7 +1320,7 @@ IDirect3D9* D3D9_008da784;
 float FLOAT_008e5e80;
 LPDIRECT3DDEVICE9 LPDIRECT3DDEVICE9_008da788;
 
-LRESULT WndProcWithMoreSteps(HWND hWnd, MSG uMsg, WPARAM wParam, LPARAM lParam);
+LRESULT WndProcWithMoreSteps(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
 
 HWND CreateD3DWindow(HWND parent, HINSTANCE hInstance, LPCSTR title, HICON icon, HCURSOR cursor, astruct_110* param_6, uint* param_7, BYTE param_8, uint flags, int* in_EAX)
 {
@@ -1415,8 +1396,8 @@ HWND CreateD3DWindow(HWND parent, HINSTANCE hInstance, LPCSTR title, HICON icon,
 		uint flagTest = flags & 0x20;
 		if (flagTest == 0)
 		{
-			posY = 0x80000000;
-			posX = 0x80000000;
+			posY = CW_USEDEFAULT;
+			posX = CW_USEDEFAULT;
 		}
 		else
 		{
@@ -1439,21 +1420,21 @@ HWND CreateD3DWindow(HWND parent, HINSTANCE hInstance, LPCSTR title, HICON icon,
 			/*
 			if (flagTest == 0)
 			{
-				DAT_008da410 = param_6->field3_0x98;
-				DAT_008da414 = param_6->field4_0x9c;
+				DAT_008da410 = PTR_008da7a0->field3_0x98;
+				DAT_008da414 = PTR_008da7a0->field4_0x9c;
 			}
-			UINT_008da418 = param_6->field6_0xa4;
+			UINT_008da418 = uStack_88;
 			astruct135_008da420 = param_8;
 			HWND_008da42c = HWND_008da79c;
 			DAT_008da430 = in_EAX[0x8A];
 			DAT_008da41c = (flags & 1) ? 2 : 1;
 			DAT_008da428 = 1;
 			DAT_008da434 = 1;
-			if (param_7 == 0)
-			{
+
+			if (param_7 == NULL)
 				// ???
-				param_7 = 0;
-			}
+				param_7 = NULL;
+
 			DAT_008da440 = param_7;
 			DAT_008da444 = 0;
 			DAT_008da43c = 0;
@@ -1464,15 +1445,16 @@ HWND CreateD3DWindow(HWND parent, HINSTANCE hInstance, LPCSTR title, HICON icon,
 			posX = 0;
 			if (posX > -1)
 			{
-				posX = param_6->field2_0xc;
 				in_EAX[8] = 1;
 				in_EAX[7] = 1;
 				nWidth = param_6->field0_0x4;
 				in_EAX[2] = nWidth;
 				flagTest = param_6->field1_0x8;
 				in_EAX[3] = flagTest;
-				posY = *(int*)LPDIRECT3DDEVICE9_008da788;
+
+				posX = param_6->field2_0xc;
 				in_EAX[4] = posX;
+				posY = *(int*)LPDIRECT3DDEVICE9_008da788;
 				// Don't know which function is actually here, but it takes no argument.
 				((LPDIRECT3DDEVICE9)posY)->AddRef();
 				uint uVar5 = 2;
@@ -1483,7 +1465,9 @@ HWND CreateD3DWindow(HWND parent, HINSTANCE hInstance, LPCSTR title, HICON icon,
 				/*
 				LPDIRECT3DDEVICE9_008da788->AddRef(0x10, &FLOAT_008e5e80);
 				LPDIRECT3DDEVICE9_008da788->AddRef(0x11, &FLOAT_008e5e80);
+
 				**(*in_EAX + 0x30)(0, 0, pfVar4, uVar5, 0xFFFFFFFF);
+
 				// The EDX register is used as the second parameter, which contains pfVar4 when calling the previous function.
 				// Then it's used as the D3D Format for the hardware compatibility test ?
 				HardwareCompatibilityTest((int)in_EAX, pfVar4);
@@ -1518,7 +1502,7 @@ D3DFORMAT D3DFMTs_0069bfe8[20] = {
 };
 
 // Returns the index of a given format into D3DFMTs_0069bfe8, with hard-coded returns instead of finding it.
-// There are a few incorrect indices and a format that doesn't exist on the current list, indicating it used to be different and they forgot to update this function.
+// There are a few incorrect indices and a format that isn't on the current list, indicating it used to be different and they forgot to update this function.
 uint GetIndexOfDXFormat(D3DFORMAT input)
 {
 	if (input < 0x2A)
@@ -1686,7 +1670,7 @@ int CreateSetupWindow(astruct_140* param_1, HINSTANCE hInst, int showSetup, int 
 	HCURSOR cursor;
 
 	// What does putting a nullptr in _time32 mean? Can you do that?
-   //FUN_00529c60(_time32(NULL));
+	//FUN_00529c60(_time32(NULL));
 
 	//uint iVar = FileObject_BuildNew2();
 	uint iVar = 0;
@@ -1808,23 +1792,21 @@ uint UINT_008da798;
 // Destroying Windows
 void __fastcall DestroyWindow(int param_1)
 {
-	LPDIRECT3DDEVICE9 device = LPDIRECT3DDEVICE9_008da788;
-	bool deviceIsNotNull = LPDIRECT3DDEVICE9_008da788 != NULL;
-	if (deviceIsNotNull)
-		device->Release();
+	if (LPDIRECT3DDEVICE9_008da788 != NULL)
+		LPDIRECT3DDEVICE9_008da788->Release();
 
 	if (D3D9_008da784 != NULL)
 		D3D9_008da784->Release();
 
 	HWND hWnd = HWND_008da79c;
-	CHAR className;
+	char className[0x3F];
 	if (HWND_008da79c != NULL)
 	{
 		HWND_008da79c = NULL;
 		UINT_008da798 = 0;
-		GetClassNameA(hWnd, &className, 0x3F);
+		GetClassNameA(hWnd, className, 0x3F);
 		DestroyWindow(hWnd);
-		UnregisterClassA(&className, HINSTANCE_008da2dc);
+		UnregisterClassA(className, HINSTANCE_008da2dc);
 		ShowCursor(TRUE);
 	}
 	LPDIRECT3DDEVICE9_008da788 = NULL;
@@ -1896,14 +1878,13 @@ INT_PTR DlgProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 				EndDialog(hwnd, 2);
 				return 1;
 			}
-			// Looks like code for a help button
+			// Maybe it's code for a help button?
 			if (wParam == 0x3fc)
 			{
 				HINSTANCE pHVar7 = ShellExecuteA(hwnd, lpOperation_0066ab90, "http://www.flatoutgame.com/", NULL, NULL, TRUE);
 				if ((INT_PTR)pHVar7 < 0x21)
-				{
 					ShellExecuteA(hwnd, lpOperation_0066ab90, "iexplorer.exe", "http://www.flatoutgame.com/", NULL, TRUE);
-				}
+
 				return 1;
 			}
 			// Control message
@@ -1934,9 +1915,9 @@ INT_PTR DlgProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 	}
 }
 
-LRESULT BasicDlgProc(HWND hWnd, int command, short param_3)
+HRESULT BasicDlgProc(HWND hWnd, UINT uMsg, short param_3)
 {
-	if (command == WM_COMMAND)
+	if (uMsg == WM_COMMAND)
 	{
 		if (param_3 == 1)
 		{
@@ -1954,20 +1935,74 @@ LRESULT BasicDlgProc(HWND hWnd, int command, short param_3)
 
 class AutoClass15
 {
-public:
-	char (*pointerToASpecialWndProc)(HWND, MSG, WPARAM, LPARAM, WPARAM*, uint);
+private:
+	int unkn_0x30;
+	WPARAM wParam_0x38;
+	uint flag_0x3c;
+	// I don't know if it actually returns a char but that's the type ghidra chose.
+	char (*wndProcIsh_0x50)(HWND, UINT, WPARAM, LPARAM, WPARAM*, uint);
 
-	void WndProc(HWND hWnd, MSG uMsg, WPARAM wParam, LPARAM lParam)
+public:
+	uint WndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 	{
 		WPARAM copy = wParam;
-		if (this->pointerToASpecialWndProc != NULL)
+		char result;
+		if (this->wndProcIsh_0x50 != NULL && (result = (*this->wndProcIsh_0x50)(hWnd, uMsg, wParam, lParam, &copy, 0), result != '\0'))
+			return wParam;
+
+		int* piVar1 = PTR_008da718;
+		if (uMsg < WM_SETCURSOR + 1)
 		{
-			this->pointerToASpecialWndProc(hWnd, uMsg, wParam, lParam, &copy, 0);
+			// The original code uses an else-if chain but I thought this looked cleaner.
+			switch (uMsg)
+			{
+			case WM_SETCURSOR:
+				if ((this->flag_0x3c != 0) && (this->unkn_0x30 == 0) && (PTR_008da718[8] != NULL))
+				{
+					SetCursor(NULL);
+					return 1;
+				}
+				break;
+
+			case WM_SIZE:
+				if ((copy == 4) || (copy == 1))
+				{
+					this->flag_0x3c = 0;
+					piVar1[7] = 0;
+				}
+				else
+				{
+					this->flag_0x3c = 1;
+					piVar1[7] = 1;
+				}
+				break;
+
+			case WM_CLOSE:
+				PostQuitMessage(0);
+				return 0;
+
+			case WM_ACTIVATEAPP:
+				this->wParam_0x38 = copy;
+				break;
+
+			}
 		}
+		else if (uMsg == WM_NCHITTEST)
+		{
+			if (this->unkn_0x30 == 0)
+				return 1;
+		}
+		else if (uMsg == WM_SYSCOMMAND)
+		{
+			if (copy == 0xF100 || copy == 0xF000 || copy == 0xF010 || copy == 0xF030 || copy == 0xF140 || copy == 0xF170)
+				return 1;
+		}
+		return DefWindowProcA(hWnd, uMsg, copy, lParam);
 	}
+
 };
 
-HRESULT WndProcWithMoreSteps(HWND hWnd, MSG uMsg, WPARAM wParam, LPARAM lParam)
+HRESULT WndProcWithMoreSteps(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
 	// One of those things that is making me think this was written in C (or maybe even assembly).
 	// Jumps directly to a WndProc function that apparently came from a class, without an object to reference.
@@ -2049,7 +2084,12 @@ int* ReadCLSIDKey(HKEY hkey, LPCSTR subKey, int param3, char* param4)
 		{
 			DWORD keyType = 1;
 			LPBYTE data;
-			if ((RegQueryValueExA(local_c, "clsid", NULL, &keyType, data, (LPDWORD)&param4) == ERROR_SUCCESS))
+			LSTATUS LVar2 = RegQueryValueExA(local_c, "clsid", NULL, &keyType, data, (LPDWORD)&param4);
+			char* local_11c;
+			BYTE local_3e4[0x200];
+			// Using an inititialized string as the keyName, don't know what that means.
+			uint uVar3 = GetKeyFromRegistry(local_11c, local_3e4, 0x200);
+			if ((LVar2 == ERROR_SUCCESS))
 			{
 				
 			}
@@ -2066,11 +2106,12 @@ int* ReadCLSIDKey(HKEY hkey, LPCSTR subKey, int param3, char* param4)
 // 
 /////////////////////////////////////////////////
 
+BYTE lpKeyState_008d7d60[0x40];
 BYTE lpKeyState_008d7e60[0x40];
 HHOOK HHOOK_008da738;
-BYTE UINT_008d7d60[0x40];
 
-void Keyboard_HookProc(int code, WPARAM wParam, LPARAM lParam);
+
+LRESULT Keyboard_HookProc(int code, WPARAM wParam, LPARAM lParam);
 
 HOOKPROC nextHook = (HOOKPROC)Keyboard_HookProc;
 
@@ -2083,7 +2124,7 @@ LRESULT Keyboard_Hook(void* cThis, uint param_1)
 		puVar2++;
 	}
 
-	puVar2 = UINT_008d7d60;
+	puVar2 = lpKeyState_008d7d60;
 	for (int i = 0x40; i != 0; i--)
 	{
 		*puVar2 = 0;
@@ -2111,10 +2152,99 @@ LRESULT Keyboard_Hook(void* cThis, uint param_1)
 	}
 }
 
-void Keyboard_HookProc(int code, WPARAM wParam, LPARAM lParam)
+int DAT_008da740;
+uint DAT_008da734;
+int* PTR_008e844c;
+
+LRESULT Keyboard_HookProc(int code, WPARAM wParam, LPARAM lParam)
 {
+	if (code < 0)
+	{
+		CallNextHookEx(HHOOK_008da738, code, wParam, lParam);
+		return;
+	}
+
+	uint wVirtKey = wParam & 0xFF;
+	if (lParam < 0)
+	{
+		if (lpKeyState_008d7e60[wVirtKey] < 0)
+			DAT_008da740--;
+
+		lpKeyState_008d7e60[wVirtKey] &= 0x7F;
+	}
+	else
+	{
+		// In Binary: 0?000000 00000000 00000000 00000000
+		if (DAT_008da734 || ((lParam & 0x40000000U) == 0))
+		{
+			if (lpKeyState_008d7e60[wVirtKey] > -1)
+				DAT_008da740--;
+
+			lpKeyState_008d7e60[wVirtKey] ^= 1;
+			lpKeyState_008d7e60[wVirtKey] |= 0x80;
+
+			lpKeyState_008d7d60[wVirtKey] += 1;
+		}
+		if (PTR_008e844c[11] != 0)
+		{
+			if (((lParam & 0x40000000U) != 0) && (PTR_008e844c[5] == 0))
+			{
+				CallNextHookEx(HHOOK_008da738, code, wParam, lParam);
+				return;
+			}
+
+			WCHAR local_20 = 0;
+			// local_4 is AND'd before it's even initialized.
+			uint local_4;
+			local_4 &= 0xFFFF0000;
+			int iVar1 = ToUnicode(wVirtKey, lParam, lpKeyState_008d7e60, &local_20, 8, 0);
+			if (iVar1 == 1)
+				// Treat local_4 as an array of 2 shorts, take the second one and concatentate with local_20.
+				local_4 = (((short*)&local_4)[1] << 16) | (short)local_20;
+
+			LPARAM LVar4;
+			uint uVar3;
+			iVar1 = ToAscii(wVirtKey, lParam, lpKeyState_008d7e60, (LPWORD)&local_20, 0);
+			if (iVar1 == -1)
+			{
+				uVar3 = local_20 & 0xFFFF;
+				wVirtKey = 0;
+				LVar4 = 0;
+			}
+			else
+			{
+				if (iVar1 != 0)
+				{
+					if (iVar1 > 0)
+					{
+						int iVar2 = 0;
+						do
+						{
+							//FUN_00550350(&local_20 + (iVar2 * 2), wVirtKey, 0, local_4);
+							iVar2++;
+						} while (iVar2 < iVar1);
+					}
+					goto hookExit;
+				}
+				uVar3 = 0;
+				LVar4 = lParam;
+			}
+			//FUN_00550350(uVar3, wVirtKey, LVar4, local_4);
+		}
+	}
+hookExit:
+	CallNextHookEx(HHOOK_008da738, code, wParam, lParam);
 	return;
 }
+
+
+
+
+/////////////////////////////////////////////////
+//
+// Time
+// 
+/////////////////////////////////////////////////
 
 DWORD GetSeconds()
 {
@@ -2127,6 +2257,12 @@ DWORD GetSeconds()
 		return lVar3 / (lVar3 >> 0x20);
 	}
 	return timeGetTime() * 1000;
+}
+
+void GetSecondsByRef(DWORD& out_seconds)
+{
+	out_seconds = GetSeconds();
+	return;
 }
 
 DWORD GetMiliseconds()
@@ -2143,14 +2279,14 @@ DWORD GetMiliseconds()
 // 
 /////////////////////////////////////////////////
 
-bool StringAddressToBinaryRepresentation(char* stringAddress, unsigned long* out_addr)
+bool StringAddressToBinaryRepresentation(char* stringAddress, ulong* out_addr)
 {
 	int local_14, local_10, local_c, local_8;
 	int occurences = sscanf(stringAddress, "%d.%d.%d.%d", &local_14, &local_10, &local_c, &local_8);
 	if (occurences < 4)
 		return false;
 
-	unsigned long binary = inet_addr(stringAddress);
+	ulong binary = inet_addr(stringAddress);
 	*out_addr = binary;
 	return binary != INADDR_NONE;
 }
@@ -2160,33 +2296,32 @@ unsigned int AsyncMaxWaitTime_00684b18;
 void MaybeSleep(DWORD miliseconds)
 {
 	if (PTR_UINT_00684570[1] != 0xd)
-	{
 		Sleep(miliseconds);
-	}
+
 	return;
 }
 
-void FUN_0062f54e(char* stringAddress, int param_2, unsigned short extraout_var)
+void GetWSAHostName(char* stringAddress, int param_2, ushort extraout_var)
 {
-	HANDLE local_c;
-	bool bVar1 = StringAddressToBinaryRepresentation(stringAddress, (unsigned long*)local_c);
+	HANDLE hRequest;
+	bool bVar1 = StringAddressToBinaryRepresentation(stringAddress, (ulong*)hRequest);
 	if (((extraout_var << 1) | bVar1) == 0)
 	{
-		char* local_40c = (char*)malloc(0x400);
-		local_c = WSAAsyncGetHostByName(NULL, 0, stringAddress, local_40c, 0x400);
+		char* result = (char*)malloc(0x400);
+		hRequest = WSAAsyncGetHostByName(NULL, 0, stringAddress, result, 0x400);
 
 		uint timePassed = 0;
 		uint start = GetMiliseconds();
 		uint now;
 
 		// Waiting for response
-		while (local_40c == 0)
+		while (result == 0)
 		{
 			now = GetMiliseconds();
 			timePassed += now - start;
 			if (AsyncMaxWaitTime_00684b18 <= timePassed)
 			{
-				WSACancelAsyncRequest(local_c);
+				WSACancelAsyncRequest(hRequest);
 				return;
 			}
 			MaybeSleep(10);
@@ -2205,13 +2340,13 @@ void MaybeSleepLoop(FILE** fileArray)
 }
 
 // The newState determines which character is set to '\1' in the string.
-// " (after 256 chacters) 0 ? ? ? 2 ? ? ? 1;
+// " (after 256 characters) 0 ? ? ? 2 ? ? ? 1;
 int SetState(char** out_string, int newState)
 {
 	 char* theString = *out_string;
 	 if (newState == 0x100)
 	 {
-		 *(theString + 0x100) = '\1';
+		 theString[0x100] = '\1';
 		 return 0;
 	 }
 	 if (newState != 0x101)
@@ -2221,10 +2356,10 @@ int SetState(char** out_string, int newState)
 			 CopyStringToPointerToString(out_string, "Invalid state.");
 			 return 2;
 		 }
-		 *(theString + 0x104) = '\1';
+		 theString[0x104] = '\1';
 		 return 0;
 	 }
-	 *(theString + 0x108) = '\1';
+	 theString[0x108] = '\1';
 	 return 0;
 }
 
@@ -2272,13 +2407,14 @@ struct GameSpyObject {
 	void* (***ptr_0x94)(void*);
 	void* (***ptr_0x98)(void*);
 	int* ptr_0x9c;
-	// Presumably tons more, this object alone is nearly 8KB large
 };
 
 GameSpyObject* GameSpyRelated_008ec884;
 
 void NewGameSpyObject()
 {
+	// This appears to be allocating an array of GameSpyObjects
+	// It's not cleanly divisible though, from what I've been able to gather they're each 256 bytes, which would fit 30 but still have room left.
 	GameSpyRelated_008ec884 = (GameSpyObject*)malloc(0x1EE0);
 	return;
 }
@@ -2299,13 +2435,18 @@ void CreateGameSpyPresenceForReal()
 		if (GameSpyRelated_008ec884 != NULL)
 		{
 			// This function doesn't return a value, and yet it's supposed to here.
-			UINT_008e84e8 = InitGameSpy(GameSpyRelated_008ec884);
+			//UINT_008e84e8 = InitGameSpy(GameSpyRelated_008ec884);
+			// I'll just do this for now
+			InitGameSpy(GameSpyRelated_008ec884);
+			UINT_008e84e8 = 1;
+
 			DAT_008e84e4++;
 			return;
 		}
 		UINT_008e84e8 = 0;
 	}
 	DAT_008e84e4++;
+	return;
 }
 
 void* (*PTR_FUN_00676f88)(void*);
@@ -2332,16 +2473,59 @@ void InitGameSpy(GameSpyObject* gs_ESI)
 	gs_ESI->unkn_0x68 = '\0';
 	gs_ESI->int_0x70 = 0;
 	gs_ESI->string_0x74 = NULL;
+
 	gs_ESI->unkn_0x7c = '\0';
 	gs_ESI->int_0x8c = 0;
 	gs_ESI->int_0x90 = 0xF;
+
+	// Assumes that an array of at least 49 GameSpyObjects have been passed in, but there's only enough room to fit 30.
 	gs_ESI->ptr_0x94 = &gs_ESI[1].func_0x0;
 	gs_ESI->ptr_0x98 = &gs_ESI[1].func_0x0;
-	gs_ESI->ptr_0x9c = &gs_ESI[1].int_0x40;
+	gs_ESI->ptr_0x9c = &gs_ESI[49].int_0x40;
 
 	ppcVar1 = &gs_ESI->string_0x74;
 	SetState_s(ppcVar1, 0x102);
 }
+
+// My own addition because this may as well be a function, makes the next function much simpler.
+bool GameInvite_StringCompare(char* subject, const char* compare, int lenOfCompare)
+{
+	bool output = true;
+	do
+	{
+		if (lenOfCompare == 0) break;
+		lenOfCompare--;
+		output = *subject == *compare;
+		subject++;
+		compare++;
+	} while (output);
+	return output;
+}
+
+void HandleGameInvite(undefined4 param_1, char*** param_2)
+{
+	// Compares the response as text to determine what to do.
+	char* response = *param_2[2];
+
+	if (GameInvite_StringCompare(response, "CANCEL GAME INVITE", 0x13))
+	{
+		// Cancel the game invite i'd imagine
+		//CancelInvite2Maybe(*param_2, NULL);
+		return;
+	}
+
+	// Wouldn't this mean that both Decline and Accept do the same thing?
+	if (!GameInvite_StringCompare(response, "DECLINE GAME INVITE", 0x14))
+		if (!GameInvite_StringCompare(response, "ACCEPT GAME INVITE", 0x13))
+			return;
+
+	//FUN_00511910(*param_2, 0);
+	return;
+}
+
+
+
+
 
 struct astruct_150 {
 	// 48 undefined bytes at offset 0x0
@@ -2375,7 +2559,8 @@ struct astruct_151 {
 /////////////////////////////////////////////////
 
 // AutoClass 9
-// I'm pretty sure this is the Lua interpreter, or at the very least it's some kind of structure that contains 
+// I thought this was the Lua interpreter, but I think it's exclusively a database thing.
+// The way it's used reminds me of XML or JSON, it appears to be just an element, but it has functions to access more elements inside.
 class AutoClass9 {
 public:
 	INT INT_0x0;
@@ -2390,7 +2575,7 @@ public:
 		char charStack[256];
 		char* tempString = in_string;
 		char currentChar;
-		// Counts the length of the string to make sure it's more than one character long
+		// Counts the length of the string
 		do {
 			currentChar = *tempString;
 			tempString = tempString + 1;
@@ -2439,11 +2624,12 @@ public:
 
 	void AddMappedTable(char* param_1, uint* param_2, uint param_3)
 	{
-		AutoClass9* pAVar3 = this->FUN_00557fe0(param_1, NULL);
+		AutoClass9* pAVar3 = this->FUN_00557fe0(param_1, '\0');
 		int iVar12 = 0;
 		int iVar8 = *param_2;
 		uint* piVar4 = param_2;
 		uint* piVar1;
+
 		while (iVar8 != 0)
 		{
 			piVar1 = piVar4 + 3;
@@ -2454,7 +2640,6 @@ public:
 
 		if ( (pAVar3 == NULL || (pAVar3->short_0xa == 0)) && (((param_3 & 6) != 0 || (param_3 & 0x400) != 0)) )
 		{
-			// I think it's a bit too late for that.
 			if (pAVar3 == NULL)
 				pAVar3 = this->FUN_00557fe0(param_1, '\1');
 
@@ -2480,19 +2665,43 @@ public:
 
 // Property Db
 
+char** PropertyDb_ActuallyFindTheProperty(char* param_1, void* in_EAX)
+{
+	short sVar1 = *(short*)((uint)in_EAX + 10);
+	char** ppcVar3 = *(char***)((uint)in_EAX + 0x10);
+	int iVar4 = 0;
+	if (sVar1 > 0)
+	{
+		int iVar2;
+		do
+		{
+			iVar2 = _stricmp(param_1, *ppcVar3);
+			if (iVar2 == 0)
+				return ppcVar3;
+
+			iVar4++;
+			ppcVar3 = ppcVar3 + (((uint)ppcVar3[1] >> 8 & 0xFFFF) + 0xC);
+		} while (iVar4 < sVar1);
+	}
+	return NULL;
+
+}
+
+
+// I can't even remember how many different versions of this function there are, I think it's a Get function that is slightly different depending on either the struct being accessed, or the type of variable being accessed.
 int PropertyDb_AccessProperty(char* in_EAX)
 {
 	char* leftBracket = strstr(in_EAX, "[");
 	char* rightBracket = strstr(in_EAX, "]");
 	char* tempPtr = in_EAX;
-	char local_100;
-	char local_110;
+	char* local_100;
+	char* local_110;
 	long lVar4;
 
+	// Counts the length of the string
 	do
-	{
 		tempPtr = tempPtr + 1;
-	} while (*tempPtr != NULL);
+	while (*tempPtr != NULL);
 
 	int iVar6;
 	char currentChar;
@@ -2501,9 +2710,9 @@ int PropertyDb_AccessProperty(char* in_EAX)
 		iVar6 = -(int)in_EAX;
 		do
 		{
+			// Copes the string in a strange way, right now I don't know what it means.
 			currentChar = *in_EAX;
-			// Doesn't using the address of a recently created local variable mean it's random?
-			in_EAX[(int)(&local_100 + iVar6)] = currentChar;
+			in_EAX[local_100[iVar6]] = currentChar;
 			in_EAX += 1;
 		} while (currentChar != NULL);
 		lVar4 = 0;
@@ -2515,32 +2724,185 @@ int PropertyDb_AccessProperty(char* in_EAX)
 		do
 		{
 			currentChar = *tempPtr;
-			tempPtr[(int)(&local_110 + iVar6)] = currentChar;
+			tempPtr[local_110[iVar6]] = currentChar;
 			tempPtr += 1;
 		} while (currentChar != NULL);
 		
-		uint* puVar2 = (uint*) & local_110;
+		uint* puVar2 = (uint*)local_110;
 		uint* puVar3;
 		do
 		{
 			puVar3 = puVar2;
 			puVar2 = puVar3 + 1;
 		} while (*puVar3 != NULL);
+
 		puVar3[-1] = NULL;
-		lVar4 = atol(&local_110);
-		strncpy(&local_100, in_EAX, (size_t)(leftBracket - in_EAX));
+		lVar4 = atol(local_110);
+		strncpy(local_100, in_EAX, (size_t)(leftBracket - in_EAX));
+		local_100[(int)leftBracket - (int)in_EAX] = NULL;
 	}
+	char** ppcVar5 = PropertyDb_ActuallyFindTheProperty(local_100, in_EAX);
+	if ((ppcVar5 != NULL) && (ppcVar5[1] != (char*)0xF))
+	{
+		if (((uint)ppcVar5[1] >> 8 & 0xFFFF) < lVar4 * 2 + 2U)
+			CreateErrorMessageAndDie("PropertyDb: out-of-bounds access of property \'%s\'");
+
+		char** ppcVar7 = (char**)ppcVar5[2];
+		if (ppcVar7 == NULL)
+			ppcVar7 = ppcVar5 + 3;
+
+		iVar6 = (int)ppcVar7 + (lVar4 * 2);
+		if (iVar6 != 0)
+			return UINT_008da728 + iVar6 * 0x14;
+	}
+	return 0;
 }
 
-
-uint AttemptToYield(astruct_114* param_1, int param_2)
+const char* Types_0065284c[] =
 {
-	if (param_1->field12_0x34 != 0)
-		//LuaLogMaybe(param_1, "attempt to yield across metamethod/C-call boundary");
+	"nil"
+	"boolean",
+	"userdata",
+	"number",
+	"string",
+	"table",
+	"function",
+	"userdata",
+	"thread",
+	"proto",
+	"upval"
+};
 
-	param_1->field9_0xc = (int)param_1->field8_0x8 + (param_2 * -2);
-	param_1->field7_0x6 = 1;
-}
+struct astruct_157
+{
+	// 7 undefined bytes at offset 0x0
+	BYTE byte_0x7;
+	// 8 undefined bytes at offset 0x8
+	int int_0x10;
+};
+
+astruct_157* FLOAT_0065271c;
+
+// I think this is the lua tables struct.
+// There are a lot of functions where the first parameter is a pointer to this struct, even if they don't reference it, leading me to believe it's part of a class/bugbear method system.
+// I'll just make it a C++ class to make things easier.
+
+// astruct_114
+class LuaTable
+{
+public:
+	// 8 undefined bytes at 0x0
+	BYTE field7_0x6;
+	// 1 undefined byte at 0x7
+	int* field8_0x8;
+	int field9_0xc;
+	int** field10_0x10;
+	int field11_0x14;
+	// 32 undefined bytes at 0x18
+	short field12_0x34;
+	// 16 undefined bytes at 0x36
+	astruct_157* field56_0x44;
+	// 4 undefined bytes at 0x48
+	int field61_0x4c;
+	int field62_0x50;
+	
+	uint AttemptToYield(int param_2)
+	{
+		if (this->field12_0x34 != 0)
+			//this->LuaLogMaybe("attempt to yield across metamethod/C-call boundary");
+
+			this->field9_0xc = (int)this->field8_0x8 + (param_2 * -2);
+		this->field7_0x6 = 1;
+	}
+
+	void Lua_AddBlankPropertyMaybe()
+	{
+		// [0] is Data?
+		// [1] is Name?
+		this->field8_0x8[1] = NULL;
+		this->field8_0x8 += 2;
+	}
+
+	void LuaRelated(char* in_string)
+	{
+		if (in_string == NULL)
+			this->Lua_AddBlankPropertyMaybe();
+		else
+		{
+			char* tempPtr = in_string;
+			char current;
+			// Counting the length of the string.
+			do
+			{
+				current = *tempPtr;
+				tempPtr++;
+			} while (current != NULL);
+
+			//this->Lua_AddPropertyMaybe(in_string, tempPtr - (in_string + 1));
+		}
+
+		return;
+	}
+
+	// Seems like astruct_114 holds several lists of astruct_157s. Maybe these are the properties of the tables.
+	// If the type is equal to or greater than 1:
+	//		type is the index + 1 into field9_0xc, and returns that item, so it's a list of pointers to lists of astruct_157s
+	// If type is less than 1, it's compared to specific values to determine the list to return. These numbers seem arbitrary and I wonder if part of the number is a flag.
+	//		-0x2712 : field56_0x44
+	//		-0x2711 :  field61_0x4c
+	//		-0x2710 : (the value in field10_0x10) + 0x17
+
+	astruct_157** Lua_GetList(int type)
+	{
+		astruct_157** output;
+		if (type < 1)
+		{
+			if (type < -0x270F)
+			{
+				if (type == -0x2712)
+					output = &this->field56_0x44;
+
+				else if (type == -0x2711)
+				{
+					this->field61_0x4c = *(int*)(*this->field11_0x14[1] + 0xC);
+					this->field62_0x50 = 5;
+					output = (astruct_157**)&this->field61_0x4c;
+				}
+				else if (type == -0x2710)
+				{
+					output = (astruct_157**)this->field10_0x10 + 0x17;
+				}
+				else if ((*this->field11_0x14[1] + 7) < -0x2712 - type)
+				{
+					output = (astruct_157**)&FLOAT_0065271c;
+				}
+				else
+				{
+					output = (astruct_157**)(*this->field11_0x14[1] + 0xC + (-0x2712 - type) * 8);
+				}
+			}
+		}
+		else
+		{
+			output = (astruct_157**)(this->field9_0xc - 8 + type * 8);
+			if (this->field8_0x8 <= (int*)output)
+				output = &FLOAT_0065271c;
+		}
+
+		return output;
+	}
+
+	const char* Lua_StringTypeFromInt(int type)
+	{
+		if (type == -1)
+			return "no value";
+		else
+			return Types_0065284c[type];
+	}
+
+};
+
+
 
 
 
@@ -2634,11 +2996,19 @@ void FUN_0054c7a0(void ** unaff_EDI)
 
 FileObject* PTR_008da72c;
 
-void OpenBFS(LPCSTR filename, HANDLE* unaff_EDI)
+// My own addition to make reading this next function much easier.
+// Macros to read different types from a char buffer at an offset.
+#define ReadAsInt(buf, offset) (*(int*)(&buf[offset]))
+#define ReadAsIntP(buf, offset) (int*)(&buf[offset])
+#define ReadAsByte(buf, offset) (*(BYTE*)(&buf[offset]))
+#define ReadAsString(buf, offset) (&buf[offset])
+
+void OpenBFS(LPCSTR filename, char** unaff_EDI)
 {
 	LPCSTR pCVar5 = filename;
 	DWORD fileFlags;
-	HANDLE bfsFile;
+	// bfsFile seems to be an all-purpose variable, first it's the handle of the file, then it's used to contain the size of the file, then it's used to point at the file's data.
+	char* bfsFile;
 	HANDLE pvVar3;
 	FileObject* pAVar4;
 	int aiStack_10[2];
@@ -2647,102 +3017,112 @@ void OpenBFS(LPCSTR filename, HANDLE* unaff_EDI)
 	int* piVar7;
 	int* piVar10;
 	char cVar1;
+
+	// Counting the length of a string
 	do
 	{
 		cVar1 = *pCVar5;
 		pCVar5 = pCVar5 + 1;
-	} while (cVar1 != '\0');
+	} while (cVar1 != NULL);
+
 	unaff_EDI[0x88] = NULL;
-	if (UINT_008da730 == 0)
-	{
-		fileFlags = FILE_ATTRIBUTE_NORMAL;
-	}
-	else
-	{
-		fileFlags = FILE_FLAG_DELETE_ON_CLOSE | FILE_ATTRIBUTE_NORMAL;
-	}
-	bfsFile = CreateFileA(filename, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, fileFlags, NULL);
-	// Copies the file to unaff_EDI because it's about to be overwritten.
+
+	fileFlags = FILE_ATTRIBUTE_NORMAL;
+
+	if (UINT_008da730)
+		fileFlags |= FILE_FLAG_DELETE_ON_CLOSE;
+
+	bfsFile = (char*)CreateFileA(filename, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, fileFlags, NULL);
+
 	*unaff_EDI = bfsFile;
 	if (bfsFile== NULL)
 	{
 		if (FUNC_008da6f4 != NULL)
-		{
 			FUNC_008da6f4();
-		}
+
 		CreateErrorMessageAndDie("Failed to open BFS archive: %s");
 	}
-	// Converts it's size into a handle ?
-	bfsFile = (HANDLE)GetFileSize(bfsFile, NULL);
-	if (bfsFile == (HANDLE)0xffffffff)
+
+	bfsFile = (char*)GetFileSize((HANDLE)bfsFile, NULL);
+	if ((uint)bfsFile == 0xffffffff)
 		CreateErrorMessageAndDie("Could not query file size for BFS archive: %s");
 
 	pAVar4 = PTR_008da72c;
 	unaff_EDI[1] = bfsFile;
 	//FUN_0059b60(pAVar4, unaff_EDI, aiStack_10, 0, 0x10);
+
 	// The file must start with the characters "bfsl"
 	if (aiStack_10[0] != 0x31736662)
 		CreateErrorMessageAndDie("BFS archive <%s> has invalid id");
 
+	// I don't know how, but it ends up with bfsFile pointing to the contents of the file
 	unaff_EDI[0x84] = bfsFile;
 	uint uStack_8 = 0;
 	size_t _Size = (int)(HANDLE)(uStack_8 & 0x7FFFFFFF) + 3U & 0xFFFFFFFC;
 	HANDLE pvStack_4;
-	unaff_EDI[0x85] = pvStack_4;
+	unaff_EDI[0x85] = (char*)pvStack_4;
 	uint* puVar7 = (uint*)malloc(_Size);
 	pAVar4 = PTR_008da72c;
-	unaff_EDI[0x82] = puVar7;
+	unaff_EDI[0x82] = (char*)puVar7;
 	//FUN_00559b60(pAVar4, unaff_EDI, puVar7, unaff_EDI[0x88], _Size);
 	//pvVar6 = unaff_EDI[0x82];
 	if ((int)uStack_8 < 0)
 		//FUN_005610f0((int)&DAT_0069bd10, _Size - 0x10 >> 2);
+		DoNothing();
 
-	if (*(int *) ((int) bfsFile + 0x10) != 0x3E5)
+	// The hash size located 16 bytes from the start, and must be 997.
+	// If it has to be a known value, why include it in the file? Some kind of anti-tamper?
+	if (ReadAsInt(bfsFile, 0x10) != 0x3E5)
 		CreateErrorMessageAndDie("BFS archive <%s> has invalid hash size (%d)");
 
-	unaff_EDI[0x86] = (HANDLE)((int)bfsFile + 0x14);
-	piVar10 = (int*)((int)bfsFile + 0x1F3C);
+	unaff_EDI[0x86] = ReadAsString(bfsFile, 0x14);
+
+	piVar10 = ReadAsIntP(bfsFile, 0x1F3C);
 	piVar7 = (int*)malloc(0x14);
 	if (piVar7 == NULL)
+		// ?
 		piVar7 = NULL;
 	else
 	{
-		iVar9 = *(int*)((int)bfsFile + 8000);
+		iVar9 = ReadAsInt(bfsFile, 8000);
 		*piVar7 = *piVar10;
-		iVar2 = *(int*)((int)bfsFile + 0x1F44);
+		iVar2 = ReadAsInt(bfsFile, 0x1F44);
 		piVar7[1] = iVar9 + (int)piVar10;
-		iVar9 = *(int*)((int)bfsFile + 0x1F48);
+		iVar9 = ReadAsInt(bfsFile, 0x1F48);
 		piVar7[2] = iVar2 + (int)piVar10;
-		iVar2 = *(int*)((int)bfsFile - 0x1F4C);
+		iVar2 = ReadAsInt(bfsFile, 0x1F4C);
 		piVar7[3] = iVar9 + (int)piVar10;
 		piVar7[4] = iVar2 + (int)piVar10;
 	}
+
 	pvVar3 = unaff_EDI[0x88];
-	unaff_EDI[0x87] = piVar7;
-	bfsFile = (HANDLE)((int)piVar10 + *piVar7);
+	unaff_EDI[0x87] = (char*)piVar7;
+	bfsFile = (char*)((int)piVar10 + *piVar7);
 	unaff_EDI[0x83] = bfsFile;
 	if (pvVar3 != NULL)
 	{
-		for (HANDLE pvVar10 = unaff_EDI[0x85]; pvVar10 != NULL; pvVar10 = (HANDLE)((int)pvVar10 + -1))
+		for (char* pvVar10 = unaff_EDI[0x85]; pvVar10 != NULL; pvVar10--)
 		{
-			*(int*)((int)bfsFile + 4) = *(int*)((int)bfsFile + 4) + (int)pvVar3;
-			if ((*(char*)((int)bfsFile + 1) != NULL) && (*(char*)((int)bfsFile + 1) != NULL))
+			ReadAsInt(bfsFile, 4) += (int)pvVar3;
+
+			// The second time's the charm.
+			if ((ReadAsString(bfsFile, 1) != NULL) && (ReadAsString(bfsFile, 1) != NULL))
 			{
-				int iVar8 = 0;
+				int i = 0;
 				do
 				{
-					piVar7 = (int*)((int)bfsFile + iVar8 * 4 + 0x18);
-					*piVar7 = *piVar7 + (int)pvVar3;
-					iVar8 += 1;
-				} while (iVar8 < (int)(uint)*(byte *)((int)bfsFile + 1));
+					piVar7 = ReadAsIntP(bfsFile, i * 4 + 0x18);
+					*piVar7 += (int)pvVar3;
+					i++;
+				} while (i < ReadAsByte(bfsFile, 1));
 			}
-			bfsFile = (HANDLE)((int)bfsFile + (uint) * (byte*)((int)bfsFile + 1) * 4 + 0x18);
+			bfsFile += ReadAsByte(bfsFile, 1) * 4 + 0x18;
 		}
 	}
 	return;
 }
 
-void InitOpenBFS(LPCSTR param_1, HANDLE* in_EAX)
+void InitOpenBFS(LPCSTR lpFilename, char** in_EAX)
 {
 	// I thought it was allocating space for the file,
 	//  but only 548 bytes?
@@ -2751,16 +3131,14 @@ void InitOpenBFS(LPCSTR param_1, HANDLE* in_EAX)
 	if (pvVar2 == NULL)
 		uVar3 = NULL;
 	else
-		OpenBFS(param_1, in_EAX);
+		OpenBFS(lpFilename, in_EAX);
 
 	//if (in_EAX[2] == in_EAX[1])
 		//FUN_00434840();
 
-	HANDLE puVar1 = in_EAX[1];
-	in_EAX[1] = (HANDLE)((int)puVar1 + 4);
+	in_EAX[1] += 4;
 
 	return;
-
 }
 
 bool WriteCharToStream(char in_char, FILE* file)
@@ -2769,8 +3147,7 @@ bool WriteCharToStream(char in_char, FILE* file)
 }
 
 // Still confused about this one
-
-uint SetFPUCW(unsigned short in_FPUControlWord)
+uint SetFPUCW(ushort in_FPUControlWord)
 {
 	uint copyOfWhat;
 
@@ -2797,14 +3174,18 @@ void DoNothing()
 // 
 /////////////////////////////////////////////////
 
-void CreateErrorMessageAndDie(const char* message)
+void CreateErrorMessageAndDie(const char* message, ...)
 {
-	char local_800;
+	char local_800[1024];
 	char body[1024];
 
-	// The list of arguments to put into the message is located at Stack[0x8], I'm not sure how that works or why, but sure.
-	//vsprintf(&local_800, message, (va_list)0x8);
-	sprintf(body, "%s", message);
+	// The list of arguments to put into the message is the rest of the CPU stack, meaning the inputs of the last-called function.
+	// I'm not quite sure how that works, I'm new to the ... operator
+	va_list list;
+	va_start(list, message);
+
+	vsprintf(local_800, message, list);
+	sprintf(body, "%s", local_800);
 	MessageBoxA(NULL, (LPCSTR)body, "Fatal error", MB_ICONERROR);
 	ExitProcess(0);
 }
@@ -2834,17 +3215,17 @@ void (*JMPTABLE_0067b1c0[])() = {
 	//FUN_005585f0
 };
 
-// The not normal jumptable
-void (*JMPTABLE_0067ad08[58])() = {};
+// The no jumptable
+void (*NOJMPTABLE_0067ad08[58])() = {};
 
 // Instead of writing all that out I'll replace it with code that would do the same thing
 // 56 of them are ExitWithCode25, and the last one is FUN_0054c970, I don't know about that one yet.
 void CreateThatWeirdJumpTable()
 {
 	for (int i = 0; i < 57; i++)
-		JMPTABLE_0067ad08[i] = ExitWithCode25;
+		NOJMPTABLE_0067ad08[i] = ExitWithCode25;
 
-	//JMPTABLE_0067ad08[57] = FUN_0054c970;
+	//NOJMPTABLE_0067ad08[57] = FUN_0054c970;
 }
 
 
@@ -2857,7 +3238,7 @@ void* DoNotCallEver(void *in_mem, int bFree)
 	// Does not return, so the rest of this never happens.
 	// But if it did, this jump table would be replaced with one where every function will exit with error code 25.
 	// If it didn't create the message, it would just silently crash anyways.
-	in_mem = &JMPTABLE_0067ad08;
+	in_mem = &NOJMPTABLE_0067ad08;
 	if (bFree)
 		free(in_mem);
 
@@ -2893,6 +3274,7 @@ undefined4 DAT_00000094;
 LPSTR LPSTR_008edca4;
 LPWCH LPWCH_006a2c2c;
 
+// I have no idea if this is a prelude to the WinMain, or the actual WinMain.
 int __stdcall WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _In_ LPSTR lpCmdLine, _In_ int nShowCmd)
 {
 	int* piVar2;
@@ -2904,7 +3286,7 @@ int __stdcall WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance
 
 	// Checks if we're running Windows but doesn't store it anywhere.
 	LPOSVERSIONINFOA osInfo;
-	//GetVersionExA(osInfo);
+	GetVersionExA(osInfo);
 
 	DWORD dStack_110;
 	DWORD dStack_104;
@@ -2948,3 +3330,18 @@ LAB_006026FF:
 		}
 		exit(code);
 }
+
+
+
+/////////////////////////////////////////////////
+//
+// Misc.
+// 
+/////////////////////////////////////////////////
+
+void memsetWithOffset(int* Dst, int offset, int val, size_t size)
+{
+	memset((void*)(*Dst + offset), val, size);
+	return;
+}
+
