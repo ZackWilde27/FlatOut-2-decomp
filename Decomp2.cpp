@@ -2272,7 +2272,8 @@ LRESULT Keyboard_HookProc(int code, WPARAM wParam, LPARAM lParam)
 	}
 	else
 	{
-		// In Binary: 00?0 0??0 00?0 0?0? ?0?0 0000 0000 0000
+		// Nevermind, I was right the first time
+		// In Binary: 0?00 0000 0000 0000 0000 0000 0000 0000
 		if (DAT_008da734 || ((lParam & 0x40000000U) == 0))
 		{
 			if (lpKeyState_008d7e60[wVirtKey] > -1)
@@ -2673,7 +2674,7 @@ struct astruct_151 {
 
 /////////////////////////////////////////////////
 //
-// AutoClass9 / PropertyDb
+// PropertyDb
 // 
 /////////////////////////////////////////////////
 
@@ -2878,43 +2879,54 @@ int PropertyDb_AccessProperty(char* in_EAX)
 }
 
 
+
+
+/////////////////////////////////////////////////
+//
+// Lua
+// 
+/////////////////////////////////////////////////
+
+
 // astruct_157
-struct LuaData
+// I thought it was a generic Lua Data struct but it turns out it's only used on strings and maybe userdata. Numbers and booleans are just stored as is.
+struct LuaString
 {
-	int (**jmptable_0x0)(void);
+	char* (**jmptable_0x0)(void);
 	// 7 undefined bytes at offset 0x0
 	int int_0x4;
 	BYTE byte_0x7;
 	// 4 undefined bytes at offset 0x8
-	int* ptr_0xc;
-	int int_0x10;
+	char** startPtr_0xc;
+	char* endPtr_0x10;
 };
 
-bool __fastcall LuaData_Verify(LuaData* data)
+bool __fastcall LuaString_Verify(LuaString* data)
 {
-	return LuaData_SomethingElse(data) > 0;
+	return LuaString_SomethingElse(data) > 0;
 }
 
-int __fastcall LuaData_SomethingElse(LuaData data[])
+// Seems like a length function but across two different strings?
+char* __fastcall LuaString_SomethingElse(LuaString data[])
 {
-	return data[1].int_0x10 - (int)data[2].ptr_0xc;
+	return data[1].endPtr_0x10 - (int)data[2].startPtr_0xc;
 }
 
-bool __fastcall LuaData_Something(LuaData* data)
+bool __fastcall LuaString_Something(LuaString* data)
 {
-	int iVar2 = LuaData_SomethingElse(data);
-	int iVar1 = *data->ptr_0xc;
-	int iVar3 = data->jmptable_0x0[2]();
+	char* iVar2 = LuaString_SomethingElse(data);
+	char* iVar1 = *data->startPtr_0xc;
+	char* iVar3 = data->jmptable_0x0[2]();
 	return iVar2 + iVar1 < iVar3;
 }
 
 
 // My own addition, It's leaning a bit towards inaccuracy, but it'll make it much easier to read the code
-// The lua table stores items as pairs of astruct_157*, where the second pointer is actually a DWORD describing the type
+// The lua table stores items as pairs of void*, where the second pointer is actually a DWORD describing the type
 // My guess is that because a DWORD is the same size, they could just cast with no issues.
 struct LuaItem
 {
-	LuaData* data;
+	void* data;
 	DWORD type;
 };
 
@@ -2953,7 +2965,7 @@ enum LT
 };
 
 // This item is never used, it represents a null LuaItem.
-// The data pointer is checked, so maybe the data doesn't have to be a pointer?
+// This had to be done because the data pointer is checked
 LuaItem LuaItem_None_0065271c;
 
 
@@ -3108,8 +3120,136 @@ public:
 
 		if (pItem == &LuaItem_None_0065271c)
 			return (DWORD)-1;
+
+		return pItem->type;
+	}
+
+	bool Lua_StringFromNumber(LuaItem* pItem)
+	{
+		bool returnCode;
+		char local_28[4];
+		if (pItem->type == LT::number)
+		{
+			// Not legal but the red squiggly lines won't go away otherwise.
+			double num = *(double*)&pItem->data;
+			sprintf(local_28, "%.5g", num);
+			//pItem->data = this->Lua_NewStringStructMaybe(local_28, String_GetLength(local_28))
+			pItem->type = LT::string;
+			returnCode = true;
+		}
 		else
-			return pItem->type;
+			returnCode = false;
+
+		return returnCode;
+	}
+
+	bool Lua_IsNumber(int index)
+	{
+		LuaItem* pItem = this->Lua_GetItem(index);
+		if (pItem->type != LT::number)
+		{
+			LuaItem tempItem;
+			return Lua_NumberFromString(pItem, &tempItem) != NULL;
+		}
+		return true;
+	}
+
+
+
+	LuaItem* Lua_NumberFromString(LuaItem* pItem1, LuaItem* pItem2)
+	{
+		if (pItem1->type != LT::number)
+		{
+			double local_8;
+			// So field_0x10 is not a pointer to the string, it is the string.
+			if (pItem1->type == LT::string && StringToNum((char*)&pItem1->data->int_0x10, &local_8))
+			{
+				pItem2->data = (void*)local_8;
+				pItem2->type = LT::number;
+				pItem1 = pItem2;
+			}
+			else
+				pItem1 = NULL;
+		}
+		return pItem1;
+	}
+
+	float Lua_GetNumber(int index)
+	{
+		LuaItem* pItem = this->Lua_GetItem(index);
+		LuaItem tempItem;
+		if (pItem->type != LT::number && (pItem = Lua_NumberFromString(pItem, &tempItem), pItem == NULL))
+		{
+			return 0.f;
+		}
+		return *(float*)&pItem->data;
+	}
+
+	bool Lua_GetBool(int index)
+	{
+		// The original function was more complex but I simplified it
+		LuaItem* pItem = this->Lua_GetItem(index);
+		if (pItem->type == 1)
+			// I thought about just returning data directly but would it truncate and possibly get the wrong result that way?
+			return pItem->data != 0;
+
+		return pItem->type != LT::nil;
+	}
+
+	int Lua_StringItemRelated(int index, undefined4* param_3)
+	{
+		LuaItem* pItem = this->Lua_GetItem(index);
+		if (pItem->type != LT::string)
+		{
+			if (Lua_StringFromNumber(pItem) == 0)
+			{
+				if (param_3 != NULL)
+					*param_3 = NULL;
+
+				return 0;
+			}
+			//if (this->field10_0x10[0x10] <= this->field10_0x10[0x11])
+				//this->FUN_005ba3a0();
+			pItem = this->Lua_GetItem(index);
+		}
+		if (param_3 != NULL)
+			*param_3 = ((LuaString*)(pItem->data))->startPtr_0xc;
+
+		return (int)&((LuaString*)(pItem->data))->endPtr_0x10;
+	}
+
+	char* Lua_GetItemAsString(int index)
+	{
+		char* result;
+		LuaItem* pItem = this->Lua_GetItem(index);
+		switch (pItem->type)
+		{
+
+		case LT::number:
+			if (Lua_StringFromNumber(pItem) == 0)
+				result = NULL;
+			else
+				result = ((LuaString*)(pItem->data))->startPtr_0xc;
+			break;
+
+		case LT::string:
+			result = ((LuaString*)(pItem->data))->startPtr_0xc;
+			break;
+
+		case LT::table:
+			//result = FUN_005c0510(pItem->data);
+			break;
+
+		default:
+			result = NULL;
+			break;
+
+		case LT::userdata_s:
+			// I don't know if this is the same struct as the LuaString.
+			// It's been put after default so it's not possible to reach here.
+			result = pItem->data->field10_0x10;
+		}
+		return result;
 	}
 
 	// Returns the name of a type
@@ -3121,7 +3261,8 @@ public:
 			return LuaTypes_0065284c[type];
 	}
 
-	LuaData* Lua_GetUserdata(int param_2)
+	// I'm not sure if the userdata uses the same struct as the strings
+	void* Lua_GetUserdata(int param_2)
 	{
 		LuaItem* pItem = this->Lua_GetItem(param_2);
 
@@ -3129,11 +3270,19 @@ public:
 			return pItem->data;
 
 		else if (pItem->type == LT::userdata_s)
-			return (LuaData*) pItem->data[1].int_0x4;
+			return (void*) pItem->data[1].int_0x4;
 
 		else
 			return NULL;
 	}
+
+	int Lua_GetIndexOfSpecialItemSomehow()
+	{
+		// I don't know what the right shift is for, it would almost make sense if it was shifted by 2, but 3 is strange.
+		return this->next_0x8 - this->table_0xc >> 3;
+	}
+
+
 
 	void StructThing(astruct_169 * tableStruct)
 	{
@@ -3148,7 +3297,7 @@ public:
 // It's another structish where I guess the second pointer is the index of a special item, which should be a function
 bool __fastcall Lua_IsFunction(LuaTable** in_EAX)
 {
-	DWORD type = (*in_EAX)->Lua_GetItemType((int)in_EAX[1]);
+	DWORD type = in_EAX[0]->Lua_GetItemType((int)in_EAX[1]);
 	return type == LT::function;
 }
 
@@ -3382,7 +3531,7 @@ void FUN_0054c610(char param_1, uchar* in_EAX)
 	int* local_154;
 	if (param_1 > -1  &&  PTR_008da72c != NULL)
 	{
-		PTR_008da72c->FUN_00559b00(in_EAX, &local_154);
+		//PTR_008da72c->FUN_00559b00(in_EAX, &local_154);
 		return;
 	}
 
@@ -3478,7 +3627,6 @@ void OpenBFS(LPCSTR filename, char** unaff_EDI)
 	int* piVar10;
 	char cVar1;
 
-	// Counting the length of a string
 	do
 	{
 		cVar1 = *pCVar5;
@@ -3563,6 +3711,8 @@ void OpenBFS(LPCSTR filename, char** unaff_EDI)
 			ReadAsInt(bfsFile, 4) += (int)pvVar3;
 
 			// The second time's the charm.
+			// The original code uses the second comparison like a trick to set i during the if, but why? I chose to do it afterwards, is it any different?
+			// && (i = 0, bfsFile[1] != NULL)
 			if ((bfsFile[1] != NULL) && (bfsFile[1] != NULL))
 			{
 				int i = 0;
