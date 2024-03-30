@@ -1,15 +1,14 @@
 // FlatOut 2 Decompilation
 
-// This is a decompilation of the GOG version of Flatout 2.
-// As far as I'm aware, the DRM is the only difference between versions, they share jump tables, function locations, and every variable that I've checked so far does the same thing.
-
-// I had a section about variables I had found with Cheat Engine but I've realized that their location is random, so it wasn't really useful anyways.
+// This is a decompilation of the GOG version of FO2.
+// As far as I'm aware, the DRM is the only difference between this and the Steam version, they share jump tables, function locations, and every variable that I've checked so far does the same thing.
 
 // Bugbear used Visual Studio 2003 aka Visual Studio 6, which means we know the IDE, compiler, all that. But finding a copy these days is difficult.
 // To remove the warnings about the unsafe string functions, add _CRT_SECURE_NO_WARNINGS to the Preprocessor definitions under Properties -> C/C++ -> Preprocessor
 
-// I don't think these are included but hey
-#include <stdio.h>
+// SCRAP Engine
+#include "Engine/SCRAP2.h"
+
 #include <stdarg.h>
 
 // D3D9.DLL
@@ -25,15 +24,11 @@
 
 //#pragma comment(lib, "dinput8.lib")
 
-// GDI32.DLL
-#include <wingdi.h>
-
 // IPHLPAPI.DLL
 #include <iphlpapi.h>
 
 // WINMM.DLL
 #include <winsock.h>
-#include <windows.h>
 
 #pragma comment(lib, "Ws2_32.lib")
 
@@ -57,41 +52,20 @@
 #include <winreg.h>
 */
 
-// Having to write out 'unsigned' every time is a bit tedious.
-#define uint unsigned int
-#define ulong unsigned long
-#define ushort unsigned short
-#define uchar unsigned char
-#define ulonglong unsigned long long
-
-#define cchar const char
-
-#define undefined1 unsigned char
-#define undefined2 unsigned short
-#define undefined4 unsigned int
-// I thought a long was 8 bytes, but that's not the case on Windows.
-// long and int are the same size? Why is it a 'long' then?
-#define undefined8 unsigned long long
-
-// Doesn't end there, turns out a long double is the same size as a double.
-// I couldn't find much information about what ghidra's float10 actually is.
-// I've heard it's an 80-bit float but 64 is the best we're going to get without some custom/third party solution.
-#define float10 long double
-
 
 /////////////////////////////////////////////////
 // Variables
-// They have been sorted by address location, grouped by relevance when possible.
+// These ones are sorted by address location, grouped by relevance when possible.
+// I went back to placing variables next to relevant functions to make things easier, I'll add them here once they're figured out
 
 DLGPROC g_dlgproc;
 
 LPCSTR lpOperation_0066ab90;
 
-const char* u_NO_TEXT_0066b38c = "u\"NO_TEXT\"";
+// Whoops, I don't know how I got the previous interpretation.
+const char16_t* u_NO_TEXT_0066b38c = u"NO_TEXT";
 
-// This build is dated September 20th, 2004, which is a couple months before FlatOut 1 released.
-// Leads me to believe it means ROMU v0.28
-const char* verString_00698b4c = "Version_0.28_build_2004.09.20";
+
 
 // These are treated like an array, AutoClass31s have an index into these DATs
 uint DAT_0069ba70;
@@ -105,7 +79,7 @@ uint DAT_0069ba8c;
 
 uint UINT_0069c2d0;
 
-const char** PTR_u_NO_TEXT_0069df4 = &u_NO_TEXT_0066b38c;
+const char16_t** PTR_u_NO_TEXT_0069df4 = &u_NO_TEXT_0066b38c;
 
 DWORD TimePassed_006a32e8;
 
@@ -122,7 +96,7 @@ uint UINT_006d68d8;
 uint UINT_006d68e8;
 uint UINT_006d68f0;
 
-void* PTR_LAB_007a9e4[5];
+void (*PTR_LAB_007a9e4[5])(void);
 
 ushort FPUConW_008d781c;
 
@@ -157,8 +131,6 @@ HINSTANCE HINST_008da564;
 void (*FUNC_008da6f4)();
 
 uint UINT_008da6fc;
-
-uint UINT_008da700;
 
 LRESULT UINT_008db344[30];
 
@@ -364,649 +336,7 @@ struct Settings {
 
 struct Settings Settings;
 
-void CreateErrorMessageAndDie(const char* message, ...);
 
-/////////////////////////////////////////////////
-// Classes
-
-// This jump table thing is making me think it's not a class but like a bugbear-made method system. But maybe that's just how classes are implemented in assembly and Ghidra is right?
-/*
-void (*JMPTABLE_0067b6f8[])() = {
-	FileObject_Close2,
-	FileObject_NotSureYet2,
-	FileObject_WriteFileToHandle,
-	FileObject_Create,
-	FileObject_Close,
-	FileObject_AddToFilePos,
-	FileObject_IsFilePosValid,
-	FileObject_GetSize,
-	FileObject_GetFilePosButLikeWhy,
-	FileObject_FlushBuffers,
-};
-*/
-
-// Credit to mrwonko on GitHub for their file object reverse engineering
-// AutoClass 25
-class FileObject {
-public:
-	void (*vtable)(); // Array of functions, methods if you will. I don't know if this is a bugbear-made system using C or this is how C++ methods are handled by the compiler.
-
-	char buffer[0x4000]; // 0x4
-
-	int usuallyNeg1;           // 0x4004 - is -1 on newly opened track_spvs.gen,
-	// I've just discovered a function that changes it, I'm still figuring this one out.
-
-	char* filePos;         // 0x4008 - "virtual" file pos - reads in 16kb blocks internally, but allows for arbitrary reads
-
-	char* realFilePos;     // 0x400C - real file's filePos, gets increased by bytesRead
-	void* size;        // 0x4010 - returned by BvhFile_Func8 unless it's -1 - *0x4008 otherwise
-	HANDLE handle;      // 0x4014
-	uint fileattributes;         // 0x4018 - bitmask related to the parameters the file was opened with
-
-	// Two different filename properties, I'm thinking maybe it's for objects that need to load both a model and texture file?
-	char* filename1; // 0x401C
-	char* filename2; // 0x4020
-
-	// Writes a section of the file to it's handle, given the buffer and desired bytes to write. Returns the number of bytes actually written for comparison.
-	// Updates realFilePos and filePos to point after the written bytes.
-	DWORD FileObject_WriteFileToHandle(LPCVOID buffer, DWORD bytesToWrite)
-	{
-		
-		DWORD bytesWritten;
-		DWORD totalBytesWritten = 0;
-		HANDLE hFile;
-		DWORD tempToWrite;
-
-		
-
-		if (bytesToWrite != 0)
-		{
-			hFile = this->handle;
-
-			for (int d = bytesToWrite; d != 0; d -= tempToWrite)
-			{
-				// Writes in 64 KB chunks unless what's left is less.
-				tempToWrite = 0xffff;
-				if (d < 0x10000)
-					tempToWrite = d;
-
-				WriteFile(hFile, buffer, tempToWrite, &bytesWritten, NULL);
-				buffer = (LPCVOID) ((int)buffer + tempToWrite);
-				totalBytesWritten += bytesWritten;
-			}
-		}
-		// Advance the pointers
-		this->realFilePos = this->realFilePos + bytesToWrite;
-		this->filePos = this->filePos + bytesToWrite;
-		return totalBytesWritten;
-	}
-
-	void FileObject_SetFilePointer(int newLoc)
-	{
-		if (this->realFilePos != (char*)newLoc)
-		{
-			this->realFilePos = (char*)newLoc;
-			SetFilePointer(this->handle, newLoc, NULL, FILE_BEGIN);
-		}
-		return;
-	}
-
-	// FileObject_New() is a more complicated version of FileObject_Create()
-	FileObject* FileObject_New(uint unaff_EBX, const char* filename_unaff_EDI)
-	{
-		FileObject* output = NULL;
-		if ((unaff_EBX & 1) == 0)
-		{
-			FileObject* piVar2 = (FileObject*)malloc(0x4024);
-			if (piVar2 != NULL)
-			{
-				piVar2->filePos = NULL;
-				piVar2->realFilePos = NULL;
-				piVar2->handle = NULL;
-				piVar2->filename1 = NULL;
-				piVar2->fileattributes = NULL;
-				//piVar2->vtable = JMPTABLE_0067b6f8;
-				piVar2->usuallyNeg1 = -1;
-				output = piVar2;
-			}
-			// Did they mean to put this inside the if statement? it'll try to call it even when the output wasn't initialized, which would just crash.
-			// Also, it wasn't given any parameters from what I can tell
-			//output->FileObject_Create();
-		}
-		else
-		{
-			struct _stat result;
-			if (_stat(filename_unaff_EDI, &result) == 0)
-			{
-				FileObject* pAVar2 = (FileObject*)malloc(0x4024);
-				if (pAVar2 != NULL)
-				{
-					pAVar2->FileObject_Clear();
-					output = pAVar2;
-				}
-				// They did it again, it's gotta be on purpose for some reason
-				//output->FileObject_Create();
-				void* pvStack_18;
-				output->size = pvStack_18;
-				return output;
-			}
-		}
-		return output;
-	}
-
-	void FileObject_Create(LPCSTR lpFilename, uint flags)
-	{
-		DWORD desiredAccess = 0;
-		DWORD creationDisposition = 0;
-		bool bVar2 = (flags & 1) != 0;
-		if (bVar2)
-		{
-			desiredAccess = GENERIC_READ;
-			creationDisposition = OPEN_EXISTING;
-		}
-		DWORD shareMode = bVar2;
-		DWORD flagsAndAttributes = bVar2;
-		if ((flags & 2) != 0)
-		{
-			desiredAccess |= GENERIC_WRITE;
-			creationDisposition |= CREATE_ALWAYS;
-			flagsAndAttributes |= FILE_ATTRIBUTE_NORMAL;
-			shareMode = FILE_SHARE_READ;
-		}
-		HANDLE handle = CreateFileA(lpFilename, desiredAccess, shareMode, NULL, creationDisposition, flagsAndAttributes, NULL);
-		this->fileattributes = flags;
-		this->handle = handle;
-		if ((handle == NULL) && (FUNC_008da6f4 != NULL))
-			(*FUNC_008da6f4)();
-
-		return;
-	}
-
-	// If mode is 1, It'll just set the file pos with no fuss.
-	// If mode is 2, It'll treat the file pos relative to the end.
-	// If mode is 0, checks a flag in the attributes and if it's set, read from the file in, a way.
-	void FileObject_SetFilePos(int newPos, int mode)
-	{
-		if (mode == 0)
-		{
-			if ((this->fileattributes & 0x100) == 0)
-			{
-				char* pcVar1 = this->filePos;
-				/*
-				for (int iVar2 = this->usuallyNeg1; iVar2 < (int)(pcVar1 + newPos) >> 0xE; iVar2++)
-					if (iVar2 > -1)
-						this->FileObject_Read(iVar2);
-				*/
-			}
-		}
-		else
-		{
-			if (mode == 1)
-			{
-				this->filePos = (char*)newPos;
-				return;
-			}
-			if (mode == 2)
-			{
-				this->filePos = (char*)((int)this->size - newPos);
-				return;
-			}
-		}
-		return;
-	}
-
-	void FileObject_FlushBuffers()
-	{
-		FlushFileBuffers(this->handle);
-	}
-
-	// This would make sense if the filePos was private, but it has to be public to be accessed by the FileObject_ClearEAX() function.
-	// It might not be a C++ class anyways so did they go through the trouble of integrating public/private distinction in their own class?
-	char* FileObject_GetFilePosButLikeWhy()
-	{
-		return this->filePos;
-	}
-
-	bool FileObject_IsFilePosValid()
-	{
-		return ((uint)this->filePos > 0) && (this->size <= this->filePos);
-	}
-
-	int FileObject_GetSize()
-	{
-		return (this->size == (void*)0xFFFFFFFF) ? (int)this->filePos : (int)this->size;
-	}
-
-	void FileObject_Clear()
-	{
-		this->usuallyNeg1 = -1;
-		this->filePos = NULL;
-		this->realFilePos = NULL;
-		this->handle = NULL;
-		this->filename1 = NULL;
-		this->filename2 = NULL;
-		return;
-	}
-
-	void __fastcall FileObject_Close()
-	{
-		if (this->handle != NULL)
-		{
-			CloseHandle(this->handle);
-			this->handle = NULL;
-		}
-		return;
-	}
-
-	FileObject* FileObject_ResetMaybe(int bFree)
-	{
-		//this->vtable = &JMPTABLE_0067b6f8;
-		if (this->handle != NULL)
-		{
-			CloseHandle(this->handle);
-			this->handle = NULL;
-		}
-		if (bFree & 1)
-		{
-			free(this);
-		}
-		return this;
-	}
-};
-
-void __fastcall FileObject_ClearEAX(FileObject* in_EAX)
-{
-	//in_EAX->vtable = JMPTABLE_0067b6f8;
-	in_EAX->usuallyNeg1 = -1;
-	in_EAX->filePos = NULL;
-	in_EAX->realFilePos = NULL;
-	in_EAX->handle = NULL;
-	in_EAX->filename1 = NULL;
-	in_EAX->filename2 = NULL;
-	return;
-}
-
-
-
-
-
-
-/////////////////////////////////////////////////
-//
-// Strings
-// 
-/////////////////////////////////////////////////
-
-// It used to be called neverReferencedAgain, because this next function checks if it's 0,
-// and that's the only time it's ever referenced.
-// Cheat Engine says this value is initialized to 0, so it always overrides.
-int g_slashOverride = 0;
-
-// SlashConvertString:
-//
-// This function copies the in_string to the out_string, returning the length of the in_string.
-// It'll also convert uppercase to lowercase.
-
-// If mode is 0:
-//
-// Starts at the location of the out_string pointer
-// Convert backslashes to slashes
-// By the end, in_string and out_string will point at the character after the NULL
-
-// If mode is not 0:
-//
-// Starts at the location after the first NULL in the out_string
-// If mode is 3, or g_slashOverride is 0, it'll convert slashes to backslashes
-// By the end, in_string will point at the character after the ending NULL
-int SlashConvertString(uchar* in_string, int mode, uchar* out_string)
-{
-	uchar* tempPtr;
-	uchar currentChar;
-	int lenOfData;
-	uchar* pcVar2;
-
-	if (mode == 0)
-	{
-		tempPtr = in_string;
-
-		// Counts the length of the string.
-		do
-		{
-			currentChar = *tempPtr;
-			tempPtr = tempPtr + 1;
-		} while (currentChar != NULL);
-
-		lenOfData = (int)tempPtr - ((int)in_string + 1);
-
-		if (lenOfData)
-		{
-			for (int x = lenOfData; x != 0; x--)
-			{
-				// Converts backslashes to forward slashes, and uppercase to lowercase
-				currentChar = *in_string;
-				in_string = in_string + 1;
-				if (currentChar == '\\')
-					currentChar = '/';
-				else
-				{
-					if (isupper(currentChar))
-					{
-						// Convert to lowercase. I love how odd yet simple it is.
-						currentChar += ' ';
-					}
-				}
-				out_string = &currentChar;
-				out_string = out_string + 1;
-			}
-			return lenOfData;
-		}
-	}
-	else
-	{
-		// If mode is not 0, replace the first character of the out_string with NULL
-		*out_string = NULL;
-		tempPtr = out_string;
-		// Steps through the output string until a NULL, and starts the copy process from there.
-		do
-		{
-			pcVar2 = tempPtr;
-			tempPtr = pcVar2 + 1;
-		} while (*pcVar2 != NULL);
-
-		currentChar = *in_string;
-
-		while (currentChar != NULL)
-		{
-			in_string = in_string + 1;
-			if (g_slashOverride == 0 || mode == 3)
-				if (currentChar == '/')
-				{
-					currentChar = '\\';
-				}
-				else if (currentChar == '\\')
-					currentChar = '/';
-
-			// Converting to lowercase
-			lenOfData = isupper(currentChar);
-			if (lenOfData != 0)
-				currentChar += ' ';
-
-			*pcVar2 = currentChar;
-			pcVar2 = pcVar2 + 1;
-			currentChar = *in_string;
-		}
-		lenOfData = (int)pcVar2 - (int)out_string;
-	}
-	*pcVar2 = NULL;
-	return lenOfData;
-}
-
-// Goes along the string until it finds a difference and returns the difference between the characters in integer value.
-int String_Compare(char* string1, char* string2)
-{
-	char char1, char2;
-	do
-	{
-		char1 = *string1;
-		char2 = *string2;
-		string1 += 1;
-		string2 += 1;
-		if (char1 == NULL) break;
-	} while (char1 == char2);
-	return char1 - char2;
-}
-
-// The same as String_Compare except safer.
-int String_Compare_s(char* string1, char* string2, int maxLength)
-{
-	char char1, char2;
-	int iVar3 = 0;
-	do
-	{
-		char1 = *string1;
-		char2 = *string2;
-		string1 += 1;
-		string2 += 1;
-		iVar3 += 1;
-		if (char1 == NULL || char1 != char2) break;
-	} while (iVar3 < maxLength);
-	// So it either returns the negative value of char2, or 0
-	return char1 - char2;
-}
-
-// Honestly not too sure about the why
-// Same as Compare_s, it sweeps through until it finds a difference and then returns the difference in value between the characters.
-char String_CompareEnd(char* out_string, char* in_string, int length)
-{
-	if (length > 0)
-	{
-		int difference = in_string - out_string;
-		do
-		{
-			if (*out_string != out_string[difference])
-				return *out_string - out_string[difference];
-
-			out_string = out_string += 1;
-			length -= 1;
-		} while (length > 0);
-	}
-	return NULL;
-}
-
-// They have a String_GetLength function but there are a lot of places that counted the string manually.
-// Maybe this was written later, or it was too expensive to call more functions?
-int String_GetLength(char* in_string)
-{
-	char* tempPtr = in_string;
-	while (*tempPtr != NULL)
-		tempPtr++;
-
-	return tempPtr - in_string;
-}
-
-// Simple copy from one string to another.
-// Both pointers will end up pointing at the end of the string, so it returns
-// the original pointer to the out_string.
-char* String_SimpleCopy(char* out_string, const char* in_string)
-{
-	char* original = out_string;
-	char current;
-	do
-	{
-		current = *in_string;
-		*out_string = current;
-		out_string += 1;
-		in_string += 1;
-	} while (current != NULL);
-	return original;
-}
-
-// Just like SimpleCopy except has a length, makes it a bit safer too.
-char* String_CopySubstring(char* out_string, char* in_string, int length)
-{
-	char* original = out_string;
-	char current;
-	do
-	{
-		if (!length)
-			return original;
-
-		current = *in_string;
-		*out_string = current;
-		out_string++;
-		in_string++;
-		length--;
-	} while (current != NULL);
-	return original;
-}
-
-// Appends the in_string to the end of the out_string.
-// Finds the first NULL in the out_string and starts there.
-// It returns the starting pointer to the out_string, but my own experimenting tells me that the original isn't modified anyways, the function is given a copy of the pointer.
-char* String_Append(char* out_string, const char* in_string)
-{
-	char* original = out_string;
-	// Sweep through the first string.
-	for (; *out_string != NULL; out_string++) {}
-
-	char current;
-	do
-	{
-		current = *in_string;
-		*out_string = current;
-		out_string++;
-		in_string++;
-	} while (current != NULL);
-	return original;
-}
-
-// Same as String_Append except with a length
-char* String_AppendSubstring(char* out_string, char* in_string, int length)
-{
-	char* original = out_string;
-	if (length)
-	{
-		// Skips to the end of the string
-		for (; out_string != NULL; out_string++) {}
-
-		char current;
-		do
-		{
-			current = *in_string;
-			*out_string = current;
-			if (current == NULL)
-				return original;
-
-			out_string++;
-			in_string++;
-			length--;
-		} while (length);
-		*out_string = NULL;
-	}
-	return original;
-}
-
-// Copies 256 characters from the in_string to the out_string, setting the
-// 256th to NULL, and the 1072nd to param_2
-void __cdecl ComplicatedCopyString(char** out_string, uint param_2, const char* in_string)
-{
-	char* _Dest = *out_string;
-	strncpy(_Dest, in_string, 0x100);
-	_Dest[0xff] = NULL;
-	*((uint *)_Dest[0x430]) = param_2;
-	return;
-}
-
-void static CopyStringToPointerToString(char** out_string, const char* in_string)
-{
-	char* _Dest;
-	_Dest = *out_string;
-	strncpy(_Dest, in_string, 0x100);
-	_Dest[0xFF] = NULL;
-	return;
-}
-
-// I just checked, it's the same as Microsoft's tolower() except 'A' - 'a' is precalculated, happens to be the space character.
-char Char_ToLowercase(char theChar)
-{
-	if (theChar > 64 && theChar < 91)
-		theChar += ' ';
-	return theChar;
-}
-
-const char* StringList_00681888[256] =
-{
-	"\0",
-	"hostname",
-	"gamename",
-	"gamever",
-	"hostport",
-	"mapname",
-	"gametype",
-	"gamevariant",
-	"numplayers",
-	"numteams",
-	"maxplayers",
-	"gamemode",
-	"teamplay",
-	"fraglimit",
-	"teamfraglimit",
-	"timeelapsed",
-	"timelimit",
-	"roundtime",
-	"roundelapsed",
-	"password",
-	"groupid",
-	"player_",
-	"score_",
-	"skill_",
-	"ping_",
-	"team_",
-	"deaths_",
-	"pid_",
-	"team_t",
-	"score_t"
-	// ... null pointers to fill the rest of the array, 256 entries long.
-};
-
-void AddStringToList(int index, const char* newString)
-{
-	if ((0x31 < index) && (index < 0xFF))
-		StringList_00681888[index] = newString;
-	return;
-}
-
-// Apparently these aren't strings, but they are treated like them.
-// Sweeps through as if it's a string, but when it does the comparison it casts both of them to integers with no conversion, so it'll compare 4 characters each time.
-bool String_CompareAsIntegers(int* ints1, int* ints2)
-{
-	bool equal = true;
-	int iVar1 = 4;
-	do
-	{
-		if (iVar1 == 0)
-			return equal;
-
-		iVar1--;
-		equal = *ints1 == *ints2;
-		ints1++;
-		ints2++;
-	} while (equal);
-	return equal;
-}
-
-// StringToNum
-// Converts the string into a float, unless it ends with an x or X character,
-// then it will treated as a ulong
-// Returns whether or not the given string ended with a null.
-bool StringToNum(char* stringFloat, float* outFloat)
-{
-	bool nullTerminated;
-	char* EndPtr;
-
-	*outFloat = (float)strtod(stringFloat, &EndPtr);
-
-	if (EndPtr == stringFloat)
-		nullTerminated = false;
-	else
-	{
-		if (*EndPtr == 'x' || *EndPtr == 'X')
-			*outFloat = (float)(ulonglong)strtoul(stringFloat, &EndPtr, 0x10);
-
-		if (*EndPtr == NULL)
-			nullTerminated = true;
-		else
-		{
-			// Sweeps through the string until a non-white-space character
-			while (isspace(*EndPtr))
-				EndPtr++;
-
-			nullTerminated = *EndPtr == NULL;
-		}
-	}
-
-	return nullTerminated;
-}
 
 
 /////////////////////////////////////////////////
@@ -1047,10 +377,9 @@ void StartGame(int param_1)
 void (*PTR_008e8418)(int);
 
 
-DWORD wWinMain(HINSTANCE hInstance, HINSTANCE prevInstance, LPCSTR lpCmdLine, char* flags)
+DWORD wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPCSTR lpCmdLine, int nShowCmd)
 {
 	HINST_008da564 = hInstance;
-	INT_PTR IVar2;
 
 	// The random seed is set to the current time
 	DWORD seed = timeGetTime();
@@ -1064,7 +393,7 @@ DWORD wWinMain(HINSTANCE hInstance, HINSTANCE prevInstance, LPCSTR lpCmdLine, ch
 	CoInitializeEx(NULL, 0);
 
 	int verCheck = CheckDirectXVersion((LPBYTE*)"4.09.00.0904");
-	if (verCheck == 0 && (IVar2 = DialogBoxParamA(hInstance, (LPCSTR)0x83, NULL, (DLGPROC)BasicDlgProc, 0), IVar2 == (INT_PTR)1))
+	if (verCheck == 0 && DialogBoxParamA(hInstance, (LPCSTR)0x83, NULL, (DLGPROC)BasicDlgProc, 0) == (INT_PTR)1)
 		return 0xffffffff;
 
 	// Sets unkn_008da6a0 to 1
@@ -1890,9 +1219,9 @@ LRESULT DeleteUpdateThread()
 
 DLGPROC Dlgproc;
 
-INT_PTR DlgProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
+INT_PTR DlgProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
-	HWND hDlg = hwnd;
+	HWND hDlg = hWnd;
 	LRESULT LVar6;
 	LRESULT* iVar10, * iVar11;
 	if (uMsg != WM_INITDIALOG)
@@ -1904,7 +1233,7 @@ INT_PTR DlgProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 				if (((NMHDR*)lParam)->code == -0x10)
 				{
 					// There were two options for it: WM_PSD_PAGESETUPDLG, and WM_USER. I chose the former.
-					UINT_006d6900 = SendDlgItemMessageA(hwnd, 0x43d, WM_PSD_PAGESETUPDLG, 0, 0);
+					UINT_006d6900 = SendDlgItemMessageA(hWnd, 0x43d, WM_PSD_PAGESETUPDLG, 0, 0);
 					UINT_008db344[UINT_008da548 + 0x14] = UINT_006d6900;
 				}
 				return 1;
@@ -1917,11 +1246,11 @@ INT_PTR DlgProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 			// is translated.
 			if (wParam == 1)
 			{
-				LVar6 = SendDlgItemMessageA(hwnd, 0x3eb, BM_GETCHECK, 0, 0);
+				LVar6 = SendDlgItemMessageA(hWnd, 0x3eb, BM_GETCHECK, 0, 0);
 				UINT_006d6908 = (uint)(LVar6 == 1);
-				LVar6 = SendDlgItemMessageA(hwnd, 0x462, BM_GETCHECK, 0, 0);
+				LVar6 = SendDlgItemMessageA(hWnd, 0x462, BM_GETCHECK, 0, 0);
 				UINT_006d690c = (uint)(LVar6 == 1);
-				LVar6 = SendDlgItemMessageA(hwnd, 0x44e, BM_GETCHECK, 0, 0);
+				LVar6 = SendDlgItemMessageA(hWnd, 0x44e, BM_GETCHECK, 0, 0);
 				UINT_006d68d0 = (uint)(LVar6 == 1);
 				/*
 				iVar11 = &UINT_008db344[UINT_008da548];
@@ -1934,21 +1263,21 @@ INT_PTR DlgProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 				DAT_006d68ec = *(uint*)(iVar10[4] + 8);
 				UINT_006d68f0 = *(uint*)(iVar10[4] + 0xC);
 				*/
-				EndDialog(hwnd, 1);
+				EndDialog(hWnd, 1);
 				return 1;
 			}
 			if (wParam == 2)
 			{
-				EndDialog(hwnd, 2);
+				EndDialog(hWnd, 2);
 				return 1;
 			}
-			// Clicking on the logo in the settings window
+			// Clicking on the logo in the settings panel
 			if (wParam == 0x3fc)
 				
 			{
-				HINSTANCE errorCode = ShellExecuteA(hwnd, lpOperation_0066ab90, "http://www.flatoutgame.com/", NULL, NULL, TRUE);
+				HINSTANCE errorCode = ShellExecuteA(hWnd, lpOperation_0066ab90, "http://www.flatoutgame.com/", NULL, NULL, TRUE);
 				if ((INT_PTR)errorCode < 33)
-					ShellExecuteA(hwnd, lpOperation_0066ab90, "iexplorer.exe", "http://www.flatoutgame.com/", NULL, TRUE);
+					ShellExecuteA(hWnd, lpOperation_0066ab90, "iexplorer.exe", "http://www.flatoutgame.com/", NULL, TRUE);
 
 				return 1;
 			}
@@ -2272,7 +1601,6 @@ LRESULT Keyboard_HookProc(int code, WPARAM wParam, LPARAM lParam)
 	}
 	else
 	{
-		// Nevermind, I was right the first time
 		// In Binary: 0?00 0000 0000 0000 0000 0000 0000 0000
 		if (DAT_008da734 || ((lParam & 0x40000000U) == 0))
 		{
@@ -2591,16 +1919,16 @@ void InitGameSpy(GameSpyObject* gs_ESI)
 // My own addition because this may as well be a function, makes the next function much simpler.
 bool GameInvite_StringCompare(char* subject, const char* compare, int lenOfCompare)
 {
-	bool output = true;
+	bool theSame = true;
 	do
 	{
 		if (!lenOfCompare) break;
 		lenOfCompare--;
-		output = *subject == *compare;
+		theSame = *subject == *compare;
 		subject++;
 		compare++;
-	} while (output);
-	return output;
+	} while (theSame);
+	return theSame;
 }
 
 void HandleGameInvite(undefined4 self, char** param_2[])
@@ -2881,425 +2209,9 @@ int PropertyDb_AccessProperty(char* in_EAX)
 
 
 
-/////////////////////////////////////////////////
-//
-// Lua
-// 
-/////////////////////////////////////////////////
 
 
-// astruct_157
-// I thought it was a generic Lua Data struct but it turns out it's only used on strings and maybe userdata. Numbers and booleans are just stored as is.
-struct LuaString
-{
-	char* (**jmptable_0x0)(void);
-	// 7 undefined bytes at offset 0x0
-	int int_0x4;
-	BYTE byte_0x7;
-	// 4 undefined bytes at offset 0x8
-	char** startPtr_0xc;
-	char* endPtr_0x10;
-};
 
-bool __fastcall LuaString_Verify(LuaString* data)
-{
-	return LuaString_SomethingElse(data) > 0;
-}
-
-// Seems like a length function but across two different strings?
-char* __fastcall LuaString_SomethingElse(LuaString data[])
-{
-	return data[1].endPtr_0x10 - (int)data[2].startPtr_0xc;
-}
-
-bool __fastcall LuaString_Something(LuaString* data)
-{
-	char* iVar2 = LuaString_SomethingElse(data);
-	char* iVar1 = *data->startPtr_0xc;
-	char* iVar3 = data->jmptable_0x0[2]();
-	return iVar2 + iVar1 < iVar3;
-}
-
-
-// My own addition, It's leaning a bit towards inaccuracy, but it'll make it much easier to read the code
-// The lua table stores items as pairs of void*, where the second pointer is actually a DWORD describing the type
-// My guess is that because a DWORD is the same size, they could just cast with no issues.
-struct LuaItem
-{
-	void* data;
-	DWORD type;
-};
-
-// And here's the table translating DWORD type into it's name
-// The first and second userdata are very different, I don't know why they have the same name outside of security.
-// technically -1 has an entry, it'll return "no value" when calling Lua_StringTypeFromInt
-const char* LuaTypes_0065284c[] =
-{
-	"nil"
-	"boolean",
-	"userdata",
-	"number",
-	"string",
-	"table",
-	"function",
-	"userdata",
-	"thread",
-	"proto",
-	"upval"
-};
-
-// I'll make an enum so I can use the type names instead of numbers
-enum LT
-{
-	nil,
-	boolean,
-	userdata,
-	number,
-	string,
-	table,
-	function,
-	userdata_s,
-	thread,
-	proto,
-	upval
-};
-
-// This item is never used, it represents a null LuaItem.
-// This had to be done because the data pointer is checked
-LuaItem LuaItem_None_0065271c;
-
-
-// Can't do += sizeof() but you can with this workaround.
-#define size_of(type) (1 * sizeof(type))
-
-struct astruct_167
-{
-	// 20 undefined bytes at offset 0x0
-	char char_0x15;
-	// 29 undefined bytes at offset 0x16
-	uint uint_0x40;
-	int int_0x44;
-	uint uint_0x4c;
-	int int_0x50;
-	int int_0x54;
-};
-
-
-struct astruct_169
-{
-	void* end_0x0; // Pointer to the last byte of itself, don't know why just yet.
-	void* unkn_0x4;
-	LuaTable* table_0x8;
-};
-
-
-
-// I'm finally starting to understand this one
-// There are a lot of functions where the first parameter is a pointer to this struct, even if they don't reference it, leading me to believe it's part of a class/bugbear method system.
-// I'll just make it a C++ class to make things easier.
-
-// astruct_114
-class LuaTable
-{
-public:
-	// 8 undefined bytes at 0x0
-	BYTE field7_0x6;
-	BYTE byte_0x7;
-	LuaItem* next_0x8; // Stores a pointer to the next blank item in the main table, for adding new ones
-	LuaItem* table_0xc; // The main table
-	astruct_167* field10_0x10;
-	int field11_0x14;
-	// 32 undefined bytes at 0x18
-	short bDebug_0x34; // Flag wether or not to enable debug logging.
-	// 16 undefined bytes at 0x36
-	LuaItem* table_0x44;
-	// 4 undefined bytes at 0x48
-	int field61_0x4c;
-	int field62_0x50;
-	
-	uint AttemptToYield(int param_2)
-	{
-		if (this->bDebug_0x34 != 0)
-			//this->LuaLogMaybe("attempt to yield across metamethod/C-call boundary");
-			DoNothing();
-
-		// I thought table_0xc was the full table, but I guess it's also a temporary pointer of some kind.
-		// I'm not that familiar with Lua, but what does this have to do with metamethods?
-		this->table_0xc = this->next_0x8 + (param_2 * -2);
-		this->field7_0x6 = 1;
-	}
-
-	void Lua_AddNilProperty()
-	{
-		// No bounds checking, If there's a way to access this function from lua it would be interesting to see what happens if this is spammed.
-		this->next_0x8->type = LT::nil;
-		this->next_0x8 += size_of(LuaItem);
-	}
-
-	void Lua_ActuallyAddStringProperty(char* data, size_t dataLength)
-	{
-		// Some kind of bounds checking I assume
-		/*
-		if (this->field10_0x10[0x10] <= this->field10_0x10[0x11])
-		{
-			FUN_005ba3a0(this);
-		}
-		*/
-
-		LuaItem* pNext = this->next_0x8;
-
-		// It's quite the rabbit hole of a function, still figuring it out.
-		//pNext->data = FUN_005c07b0(this, data, dataLength);
-
-		pNext->type = LT::string;
-		this->next_0x8 += size_of(LuaItem);
-	}
-
-	void Lua_AddStringProperty(char* in_string)
-	{
-		if (in_string == NULL)
-			this->Lua_AddNilProperty();
-		else
-			this->Lua_ActuallyAddStringProperty(in_string, String_GetLength(in_string));
-
-		return;
-	}
-
-	// Seems like astruct_114 has several different tables, or maybe it's like one big table that has temporary pointers
-	// If the index is equal to or greater than 1:
-	//		The 1-based index into table_0xc
-	// If index is less than 1, it's compared to specific values to determine the list to return. These numbers seem arbitrary and I wonder if part of the number is a flag.
-	//		-0x2712 : field56_0x44
-	//		-0x2711 :  some math involving field11_0x14
-	//		-0x2710 : table_0x10 + 0x17
-
-	LuaItem* Lua_GetItem(int index)
-	{
-		LuaItem* output;
-		if (index < 1)
-		{
-			if (index < -0x270F)
-			{
-				if (index == -0x2712)
-					output = this->table_0x44;
-
-				else if (index == -0x2711)
-				{
-					this->field61_0x4c = *(int*)(*this->field11_0x14[1] + 0xC);
-					this->field62_0x50 = 5;
-					output = (LuaItem*)&this->field61_0x4c;
-				}
-				else if (index == -0x2710)
-				{
-					output = (LuaItem*)this->field10_0x10 + 0x17;
-				}
-				else if ((*this->field11_0x14[1] + 7) < -0x2712 - index)
-				{
-					output = &LuaItem_None_0065271c;
-				}
-				else
-				{
-					output = (LuaItem*)(*this->field11_0x14[1] + 0xC + (-0x2712 - index) * 8);
-				}
-			}
-		}
-		else
-		{
-			output = (LuaItem*)(this->table_0xc - 8 + index * 8);
-			if (output > this->next_0x8)
-				output = &LuaItem_None_0065271c;
-		}
-
-		return output;
-	}
-
-	// Returns the type of the item at indexKinda
-	DWORD Lua_GetItemType(int index)
-	{
-		 LuaItem* pItem = this->Lua_GetItem(index);
-
-		if (pItem == &LuaItem_None_0065271c)
-			return (DWORD)-1;
-
-		return pItem->type;
-	}
-
-	bool Lua_StringFromNumber(LuaItem* pItem)
-	{
-		bool returnCode;
-		char local_28[4];
-		if (pItem->type == LT::number)
-		{
-			// Not legal but the red squiggly lines won't go away otherwise.
-			double num = *(double*)&pItem->data;
-			sprintf(local_28, "%.5g", num);
-			//pItem->data = this->Lua_NewStringStructMaybe(local_28, String_GetLength(local_28))
-			pItem->type = LT::string;
-			returnCode = true;
-		}
-		else
-			returnCode = false;
-
-		return returnCode;
-	}
-
-	bool Lua_IsNumber(int index)
-	{
-		LuaItem* pItem = this->Lua_GetItem(index);
-		if (pItem->type != LT::number)
-		{
-			LuaItem tempItem;
-			return Lua_NumberFromString(pItem, &tempItem) != NULL;
-		}
-		return true;
-	}
-
-
-
-	LuaItem* Lua_NumberFromString(LuaItem* pItem1, LuaItem* pItem2)
-	{
-		if (pItem1->type != LT::number)
-		{
-			double local_8;
-			// So field_0x10 is not a pointer to the string, it is the string.
-			if (pItem1->type == LT::string && StringToNum((char*)&pItem1->data->int_0x10, &local_8))
-			{
-				pItem2->data = (void*)local_8;
-				pItem2->type = LT::number;
-				pItem1 = pItem2;
-			}
-			else
-				pItem1 = NULL;
-		}
-		return pItem1;
-	}
-
-	float Lua_GetNumber(int index)
-	{
-		LuaItem* pItem = this->Lua_GetItem(index);
-		LuaItem tempItem;
-		if (pItem->type != LT::number && (pItem = Lua_NumberFromString(pItem, &tempItem), pItem == NULL))
-		{
-			return 0.f;
-		}
-		return *(float*)&pItem->data;
-	}
-
-	bool Lua_GetBool(int index)
-	{
-		// The original function was more complex but I simplified it
-		LuaItem* pItem = this->Lua_GetItem(index);
-		if (pItem->type == 1)
-			// I thought about just returning data directly but would it truncate and possibly get the wrong result that way?
-			return pItem->data != 0;
-
-		return pItem->type != LT::nil;
-	}
-
-	int Lua_StringItemRelated(int index, undefined4* param_3)
-	{
-		LuaItem* pItem = this->Lua_GetItem(index);
-		if (pItem->type != LT::string)
-		{
-			if (Lua_StringFromNumber(pItem) == 0)
-			{
-				if (param_3 != NULL)
-					*param_3 = NULL;
-
-				return 0;
-			}
-			//if (this->field10_0x10[0x10] <= this->field10_0x10[0x11])
-				//this->FUN_005ba3a0();
-			pItem = this->Lua_GetItem(index);
-		}
-		if (param_3 != NULL)
-			*param_3 = ((LuaString*)(pItem->data))->startPtr_0xc;
-
-		return (int)&((LuaString*)(pItem->data))->endPtr_0x10;
-	}
-
-	char* Lua_GetItemAsString(int index)
-	{
-		char* result;
-		LuaItem* pItem = this->Lua_GetItem(index);
-		switch (pItem->type)
-		{
-
-		case LT::number:
-			if (Lua_StringFromNumber(pItem) == 0)
-				result = NULL;
-			else
-				result = ((LuaString*)(pItem->data))->startPtr_0xc;
-			break;
-
-		case LT::string:
-			result = ((LuaString*)(pItem->data))->startPtr_0xc;
-			break;
-
-		case LT::table:
-			//result = FUN_005c0510(pItem->data);
-			break;
-
-		default:
-			result = NULL;
-			break;
-
-		case LT::userdata_s:
-			// I don't know if this is the same struct as the LuaString.
-			// It's been put after default so it's not possible to reach here.
-			result = pItem->data->field10_0x10;
-		}
-		return result;
-	}
-
-	// Returns the name of a type
-	const char* Lua_StringTypeFromInt(DWORD type)
-	{
-		if (type == -1)
-			return "no value";
-		else
-			return LuaTypes_0065284c[type];
-	}
-
-	// I'm not sure if the userdata uses the same struct as the strings
-	void* Lua_GetUserdata(int param_2)
-	{
-		LuaItem* pItem = this->Lua_GetItem(param_2);
-
-		if (pItem->type == LT::userdata)
-			return pItem->data;
-
-		else if (pItem->type == LT::userdata_s)
-			return (void*) pItem->data[1].int_0x4;
-
-		else
-			return NULL;
-	}
-
-	int Lua_GetIndexOfSpecialItemSomehow()
-	{
-		// I don't know what the right shift is for, it would almost make sense if it was shifted by 2, but 3 is strange.
-		return this->next_0x8 - this->table_0xc >> 3;
-	}
-
-
-
-	void StructThing(astruct_169 * tableStruct)
-	{
-		tableStruct->end_0x0 = tableStruct + 3;
-		tableStruct->unkn_0x4 = NULL;
-		tableStruct->table_0x8 = this;
-	}
-
-
-};
-
-// It's another structish where I guess the second pointer is the index of a special item, which should be a function
-bool __fastcall Lua_IsFunction(LuaTable** in_EAX)
-{
-	DWORD type = in_EAX[0]->Lua_GetItemType((int)in_EAX[1]);
-	return type == LT::function;
-}
 
 
 
@@ -3522,214 +2434,9 @@ void LoadBinaryDatabase(char *flags)
 }
 */
 
-uchar* PTR_UCHAR_008d7860;
-uchar STRING_008d7868[64]; // Don't know how big the string is yet
-int INT_008da6e0;
-
-void FUN_0054c610(char param_1, uchar* in_EAX)
-{
-	int* local_154;
-	if (param_1 > -1  &&  PTR_008da72c != NULL)
-	{
-		//PTR_008da72c->FUN_00559b00(in_EAX, &local_154);
-		return;
-	}
-
-	// There's a lot of local variables being used before being initialized, are they supposed to be parameters?
-	uchar local_104;
-	SlashConvertString(&local_104, 0, in_EAX);
-
-	uchar local_155 = NULL;
-	PTR_UCHAR_008d7860 = NULL;
-
-	struct _stat local_14c;
-	SlashConvertString(&local_104, (int)&local_14c, in_EAX);
-
-	int iVar2;
-
-	if (_stat((const char*)&local_104, &local_14c) == 0)
-	{
-		local_155 = '\1';
-		iVar2 = 0;
-		uchar uVar1;
-		do
-		{
-			uVar1 = (&local_104)[iVar2];
-			(&STRING_008d7868)[iVar2];
-			iVar2++;
-		} while (uVar1 != NULL);
-		PTR_UCHAR_008d7860 = (uchar*)&STRING_008d7868;
-	}
-	else if (INT_008da6e0 > 0)
-	{
-		SlashConvertString(&local_104, 0, in_EAX);
-		iVar2 = 0;
-		if (INT_008da6e0 > 0)
-		{
-			do
-			{
-				filename = FUN_0054c180();
-				fileStatus = __stat(filename, (int*)())
-			}
-		}
-	}
 
 
-}
-
-uchar* FUN_0054c180(int in_EAX)
-{
-	char* puVar6 = (&UINT_008d796c)[in_EAX];
-
-}
-
-void FUN_0054c7a0(void ** unaff_EDI)
-{
-	void* pvVar2 = *unaff_EDI;
-	int iVar3 = (int)unaff_EDI[1] - (int)pvVar2 >> 2;
-	int iVar1;
-	if (iVar3 < 4)
-		iVar1 = 3;
-	else
-		iVar1 = iVar3 * 3 >> 1;
-
-	if ((int)unaff_EDI[2] - (int)pvVar2 >> 2 < iVar1)
-	{
-		pvVar2 = realloc(pvVar2, iVar1 * 4);
-		unaff_EDI[2] = (void*)(iVar1 * 4 + (int)pvVar2);
-		*unaff_EDI = pvVar2;
-		unaff_EDI[1] = (void*)((int)pvVar2 + iVar3 * 4);
-	}
-	return;
-}
-
-FileObject* PTR_008da72c;
-
-// My own addition to make reading this next function much easier.
-// Macros to read different types from a char buffer at an offset.
-#define ReadAsInt(buf, offset) (*(int*)(&buf[offset]))
-#define ReadAsIntP(buf, offset) (*(int**)(&buf[offset]))
-#define ReadAsByte(buf, offset) (*(BYTE*)(&buf[offset]))
-#define ReadAsString(buf, offset) (&buf[offset])
-
-void OpenBFS(LPCSTR filename, char** unaff_EDI)
-{
-	LPCSTR pCVar5 = filename;
-	DWORD fileFlags;
-	// bfsFile seems to be an all-purpose variable, first it's the handle of the file, then it's used to contain the size of the file, then it's used to point at the file's data.
-	char* bfsFile;
-	HANDLE pvVar3;
-	FileObject* pAVar4;
-	int aiStack_10[2];
-	int iVar2;
-	int iVar9;
-	int* piVar7;
-	int* piVar10;
-	char cVar1;
-
-	do
-	{
-		cVar1 = *pCVar5;
-		pCVar5 = pCVar5 + 1;
-	} while (cVar1 != NULL);
-
-	unaff_EDI[0x88] = NULL;
-
-	fileFlags = FILE_ATTRIBUTE_NORMAL;
-
-	if (UINT_008da730)
-		fileFlags |= FILE_FLAG_DELETE_ON_CLOSE;
-
-	bfsFile = (char*)CreateFileA(filename, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, fileFlags, NULL);
-
-	*unaff_EDI = bfsFile;
-	if (bfsFile== NULL)
-	{
-		if (FUNC_008da6f4 != NULL)
-			FUNC_008da6f4();
-
-		CreateErrorMessageAndDie("Failed to open BFS archive: %s");
-	}
-
-	bfsFile = (char*)GetFileSize((HANDLE)bfsFile, NULL);
-	if ((uint)bfsFile == 0xffffffff)
-		CreateErrorMessageAndDie("Could not query file size for BFS archive: %s");
-
-	pAVar4 = PTR_008da72c;
-	unaff_EDI[1] = bfsFile;
-	//FUN_0059b60(pAVar4, unaff_EDI, aiStack_10, 0, 0x10);
-
-	// The file must start with the characters "bfsl"
-	if (aiStack_10[0] != 0x31736662)
-		CreateErrorMessageAndDie("BFS archive <%s> has invalid id");
-
-	// I don't know how, but it ends up with bfsFile pointing to the contents of the file
-	unaff_EDI[0x84] = bfsFile;
-	uint uStack_8 = 0;
-	size_t _Size = (int)(HANDLE)(uStack_8 & 0x7FFFFFFF) + 3U & 0xFFFFFFFC;
-	HANDLE pvStack_4;
-	unaff_EDI[0x85] = (char*)pvStack_4;
-	uint* puVar7 = (uint*)malloc(_Size);
-	pAVar4 = PTR_008da72c;
-	unaff_EDI[0x82] = (char*)puVar7;
-	//FUN_00559b60(pAVar4, unaff_EDI, puVar7, unaff_EDI[0x88], _Size);
-	//pvVar6 = unaff_EDI[0x82];
-	if ((int)uStack_8 < 0)
-		//FUN_005610f0((int)&DAT_0069bd10, _Size - 0x10 >> 2);
-		DoNothing();
-
-	// The hash size located 16 bytes from the start, and must be 997.
-	// If it has to be a known value, why include it in the file? Some kind of anti-tamper?
-	if (ReadAsInt(bfsFile, 0x10) != 0x3E5)
-		CreateErrorMessageAndDie("BFS archive <%s> has invalid hash size (%d)");
-
-	unaff_EDI[0x86] = ReadAsString(bfsFile, 0x14);
-
-	piVar10 = ReadAsIntP(bfsFile, 0x1F3C);
-	piVar7 = (int*)malloc(0x14);
-	if (piVar7 != NULL)
-	{
-		iVar9 = ReadAsInt(bfsFile, 8000);
-		*piVar7 = *piVar10;
-		iVar2 = ReadAsInt(bfsFile, 0x1F44);
-		piVar7[1] = iVar9 + (int)piVar10;
-		iVar9 = ReadAsInt(bfsFile, 0x1F48);
-		piVar7[2] = iVar2 + (int)piVar10;
-		iVar2 = ReadAsInt(bfsFile, 0x1F4C);
-		piVar7[3] = iVar9 + (int)piVar10;
-		piVar7[4] = iVar2 + (int)piVar10;
-	}
-
-	pvVar3 = unaff_EDI[0x88];
-	unaff_EDI[0x87] = (char*)piVar7;
-	bfsFile = (char*)((int)piVar10 + *piVar7);
-	unaff_EDI[0x83] = bfsFile;
-	if (pvVar3 != NULL)
-	{
-		for (char* pvVar10 = unaff_EDI[0x85]; pvVar10 != NULL; pvVar10--)
-		{
-			ReadAsInt(bfsFile, 4) += (int)pvVar3;
-
-			// The second time's the charm.
-			// The original code uses the second comparison like a trick to set i during the if, but why? I chose to do it afterwards, is it any different?
-			// && (i = 0, bfsFile[1] != NULL)
-			if ((bfsFile[1] != NULL) && (bfsFile[1] != NULL))
-			{
-				int i = 0;
-				do
-				{
-					piVar7 = ReadAsIntP(bfsFile, i * 4 + 0x18);
-					*piVar7 += (int)pvVar3;
-					i++;
-				} while (i < ReadAsByte(bfsFile, 1));
-			}
-			bfsFile += ReadAsByte(bfsFile, 1) * 4 + 0x18;
-		}
-	}
-	return;
-}
-
-void InitOpenBFS(LPCSTR lpFilename, char** in_EAX)
+void InitOpenBFS(LPCSTR lpFilename, register char** in_EAX)
 {
 	void* pvVar2 = malloc(0x224);
 	void* uVar3;
@@ -3764,96 +2471,19 @@ uint SetFPUCW(ushort in_FPUControlWord)
 	return copyOfWhat << 2 | in_FPUControlWord;
 }
 
-void DoNothing()
-{
-	return;
-}
-
-
 
 
 
 /////////////////////////////////////////////////
 //
-// Debug
+// Misc.
 // 
 /////////////////////////////////////////////////
-
-void CreateErrorMessageAndDie(const char* message, ...)
-{
-	char local_800[1024];
-	char body[1024];
-
-	// The list of arguments to put into the message is the rest of the CPU stack, meaning the inputs of the last-called function.
-	// I'm not quite sure how that works, I'm new to the ... operator
-	va_list list;
-	va_start(list, message);
-
-	vsprintf(local_800, message, list);
-	sprintf(body, "%s", local_800);
-	MessageBoxA(NULL, (LPCSTR)body, "Fatal error", MB_ICONERROR);
-	ExitProcess(0);
-}
-
-void (*FUNC_006a2c28)();
-
-// My guess is, this is where bugbear's debugger would take over for investigation.
-void ExitWithCode25()
-{
-	if (FUNC_006a2c28 != NULL)
-		(*FUNC_006a2c28)();
-
-	// This function emits the runtime error message to stderr for console applications,
-	// or displays the message in a message box for Windows applications.
-	// In debug mode, you can choose to invoke the debugger before exiting.
-	// - Documentation
-	// It also needs an internal.h file, but I don't have it.
-	//_amsg_exit(0x19);
-}
-
-// The normal jumptable
-void (*JMPTABLE_0067b1c0[])() = {
-	//FUN_00558390
-	//AutoClass9::AddMappedTable,
-	//FUN_005585e0
-	DoNothing,
-	//FUN_005585f0
-};
-
-// The no jumptable
-void (*NOJMPTABLE_0067ad08[58])() = {};
-
-// Instead of writing all that out I'll replace it with code that would do the same thing
-// 56 of them are ExitWithCode25, and the last one is FUN_0054c970, I don't know about that one yet.
-void CreateThatWeirdJumpTable()
-{
-	for (int i = 0; i < 57; i++)
-		NOJMPTABLE_0067ad08[i] = ExitWithCode25;
-
-	//NOJMPTABLE_0067ad08[57] = FUN_0054c970;
-}
-
-
-void* DoNotCallEver(void *in_mem, int bFree)
-{
-	// Seems like a default value maybe.
-	in_mem = &JMPTABLE_0067b1c0;
-	CreateErrorMessageAndDie("Must not be called - ever.");
-
-	// Does not return, so the rest of this never happens.
-	// But if it did, this jump table would be replaced with one where every function will exit with error code 25.
-	// If it didn't create the message, it would just silently crash anyways.
-	in_mem = &NOJMPTABLE_0067ad08;
-	if (bFree)
-		free(in_mem);
-
-	return in_mem;
-}
 
 // Here's the thing: nearly every time this function is called,
 // It's given the DoNothing() function.
 // Is it some kind of delay?
-void RepeatFunction(void (*func)(), int nTimes_EAX)
+void RepeatFunction(void (*func)(), register int nTimes_EAX)
 {
 	if (nTimes_EAX + -1 > -1)
 	{
@@ -3864,14 +2494,6 @@ void RepeatFunction(void (*func)(), int nTimes_EAX)
 	}
 	return;
 }
-
-
-
-/////////////////////////////////////////////////
-//
-// Misc.
-// 
-/////////////////////////////////////////////////
 
 void memsetWithOffset(void** Dst, uint Offset, int Val, size_t Size)
 {
