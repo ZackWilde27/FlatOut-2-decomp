@@ -1,6 +1,5 @@
 #pragma once
 
-#include <string.h>
 #include <stdio.h>
 #include <math.h>
 
@@ -9,21 +8,43 @@
 // SHELL32.DLL
 // KERNEL32.DLL
 // GDI32.DLL
+// ADVAPI32.DLL
+// OLE32.DLL
 #include <windows.h>
+// I'll start adding them back if I discover that it's not included in windows.h
+/*
+#include <combaseapi.h>
+#include <shellapi.h>
+#include <fileapi.h>
+#include <libloaderapi.h>
+#include <process.h>
+#include <synchapi.h>
+#include <winbase.h>
+#include <winsock.h>
+#include <timeapi.h>
+#include <memoryapi.h>
+#include <WinUser.h>
+#include <winreg.h>
+*/
+
+#include <setjmp.h>
+
+#include <stdlib.h>
+#include <string>
 
 
+// Wait a minute, Microsoft already did this
+#define uint UINT
+#define ulong ULONG
+#define ushort USHORT
+#define uchar UCHAR
+#define ulonglong ULONGLONG
+#define cchar const char // This was my idea though, I can at least claim that.
 
-// Having to write out 'unsigned' every time is a bit tedious.
-#define uint unsigned int
-#define ulong unsigned long
-#define ushort unsigned short
-#define uchar unsigned char
-#define ulonglong unsigned long long
+// I didn't know that wide strings were unicode, but in my defence, if they are interchangable why is there both wchar_t and char16_t? both u"String" and L"String"?
+#define LPUSTR LPWSTR
 
-// There's LPCSTR for standard strings, LPWSTR for wide strings, but no LPUSTR for unicode strings
-#define LPUSTR const char16_t*
 
-#define cchar const char
 
 #define undefined1 unsigned char
 #define undefined2 unsigned short
@@ -32,7 +53,7 @@
 // long and int are the same size? Why is it a 'long' then?
 #define undefined8 unsigned long long
 
-// Doesn't end there, turns out a long double is the same size as a double.
+// Doesn't end there, putting aside the missed opportunity to call it a double double, it turns out a long double is the same size as a double.
 // I couldn't find much information about what ghidra's float10 actually is.
 // I've heard it's an 80-bit float but 64 is the best we're going to get without some other solution.
 #define float10 long double
@@ -41,12 +62,8 @@
 #define size_of(type) (1 * sizeof(type))
 
 
-
-
 void CreateErrorMessageAndDie(const char* message, ...);
-
 void* DoNotCallEver(void* jmpTable, int bFree);
-
 
 
 
@@ -64,7 +81,7 @@ int String_Compare_s(char* string1, char* string2, int maxLength);
 
 char String_CompareEnd(char* out_string, char* in_string, int length);
 
-int String_GetLength(char* in_string);
+int String_GetLength(const char* in_string);
 
 char* String_SimpleCopy(char* out_string, const char* in_string);
 
@@ -135,19 +152,19 @@ struct LuaItem
 	int type;
 };
 
-// And here's the table translating DWORD type into it's name
+// And here's the table of lua types
 // The first and second userdata are very different, probably have the same name for security
 // technically -1 has an entry, it'll return "no value" when calling Lua_StringTypeFromInt
 const char* LuaTypes_0065284c[] =
 {
 	"nil" // data is not defined, could be anything
-	"boolean",
-	"userdata", // maybe a string containing the userdata?
-	"number", // data is a float, or I guess with 64-bit, a double.
-	"string", // not a char* unfortunately, data is a struct, maybe for wide string support
-	"table",
-	"function",
-	"userdata",
+	"boolean", // boolean inside data
+	"userdata", // I think it's just a char*, still need to confirm that
+	"number", // float inside data, so it's as percise as the word size is large.
+	"string", // pointer to struct containing a wide string.
+	"table", // I'm still confirming whether this is a LuaTable or some other table
+	"function", // data is the pointer to the function
+	"userdata", // data is a struct, still haven't figured it out yet
 	"thread",
 	"proto",
 	"upval"
@@ -182,8 +199,8 @@ struct LuaString
 	int int_0x4;
 	BYTE byte_0x7;
 	// 4 undefined bytes at offset 0x8
-	char* startPtr_0xc;
-	char* endPtr_0x10;
+	UINT length_0xc;
+	wchar_t* theString_0x10;
 };
 
 struct LuaUserData
@@ -198,7 +215,7 @@ struct LuaUserData
 };
 
 // I think this is lua's userdata_s struct, or maybe it's the other way around and this is the string
-struct astruct_167
+struct UnknownStruct
 {
 	// 20 undefined bytes at offset 0x0
 	char char_0x15;
@@ -219,7 +236,7 @@ struct astruct_169
 };
 
 
-// In the original code these are structs that have a function table as their first property, but for the sake of readability I changed them to C++ classes.
+// In the original code these are structs that have a function table as their first property, but to make things easier I changed them to C++ classes.
 
 class LuaTable
 {
@@ -227,14 +244,17 @@ public:
 	// 8 undefined bytes at 0x0
 	BYTE field7_0x6;
 	BYTE byte_0x7;
-	LuaItem* next_0x8; // Stores a pointer to the next blank item in the main table, for adding new ones
-	LuaItem* table_0xc; // The main table
-	astruct_167* field10_0x10;
+	LuaItem* next_0x8; // Stores a pointer to the next blank item in table_0xc, for adding new ones
+	LuaItem* table_0xc; // The current table
+	UnknownStruct* field10_0x10;
 	int** field11_0x14;
-	// 32 undefined bytes at 0x18
+	LuaItem* endOfTable_0x1c;
+	// 4 undefined bytes at 0x18
+	int field17_0x20;
+	// 24 undefined bytes at offset 0x24
 	short bDebug_0x34; // Flag wether or not to enable debug logging.
 	// 16 undefined bytes at 0x36
-	LuaItem* table_0x44;
+	LuaItem* table_0x44; // Some other table, maybe it's the main one or something?
 	// 4 undefined bytes at 0x48
 	int field61_0x4c;
 	int field62_0x50;
@@ -242,33 +262,53 @@ public:
 	uint AttemptToYield(int param_2);
 
 	void Lua_AddNilProperty();
-	void Lua_ActuallyAddStringProperty(char* data, size_t dataLength);
-	void Lua_AddStringProperty(char* in_string);
+	void Lua_ActuallyAddStringProperty(const char* in_wstring, size_t length);
+	void Lua_AddStringProperty(const char* in_string);
+	void Lua_AddStringProperty2(char* in_string);
 	void Lua_AddBoolProperty(bool in_bool);
+	void Lua_AddUserDataProperty(void* userdata);
+
+	void Lua_AddNumberPropertyFromInt(int in_number);
+	void Lua_AddNumberPropertyFromFloat(float in_number);
+	void Lua_Add3ItemsAndCopy1(LuaItem* out_pItem1, LuaItem* pItem1, LuaItem* pItem2, LuaItem* pItem3);
+	void CopyItemFromTableItem(int tableIndex, int itemIndex);
 
 	LuaItem* Lua_GetItem(int index);
-
 	int Lua_GetItemType(int index);
+	void Lua_DuplicateItem(int index);
+
+	void Lua_RemoveItem(int index);
+	void Lua_InsertLastItem(int index);
+
+	void Lua_SeekNextPtr(int newIndex);
 
 	bool Lua_StringFromNumber(LuaItem* pItem);
 
 	bool Lua_IsNumber(int index);
 
+	BOOL Lua_IsNumber_s(int index, LuaTable* otherTable);
+
 	bool Lua_IsUserData(int index);
 
 	LuaItem* Lua_NumberFromString(LuaItem* pStringItem, LuaItem* pNewNumberItem);
 
-	float Lua_GetNumber(int index);
-
+	float Lua_GetNumberAsFloat(int index);
+	long Lua_GetNumberAsInt(int index);
+	LuaItem* Lua_GetNumberItem(int index);
 	bool Lua_GetBool(int index);
+	void* Lua_GetThread(int index);
+	LuaUserData* Lua_GetUserdata(int index);
 
-	int Lua_StringItemRelated(int index, undefined4* param_3);
+	wchar_t* Lua_GetStringItem(int index, UINT* out_length);
+	wchar_t* Lua_GetStringItem_s(int index, UINT* out_length);
 
-	char* Lua_GetItemAsString(int index);
+	char* Lua_GetItemStringLength(int index);
 
 	const char* Lua_StringTypeFromInt(int type);
 
-	LuaUserData* Lua_GetUserdata(int param_2);
+	
+
+	void Lua_gettable(LuaItem* pItem, LuaItem* pLastItem1, LuaItem* pNewItem);
 
 	int Lua_GetTableLength();
 
@@ -280,7 +320,9 @@ public:
 
 	void Lua_ThrowIfIndexIsNotGivenType(int index, int expectedType);
 	void Lua_ReportError(int index, int expectedType);
-	void Lua_ReportErrorForReal(int index);
+	void Lua_ReportErrorForReal(int index, int expectedType);
+
+	int Lua_Printf(char* format, ...);
 
 	// Gameplay functions?
 	uint Lua_KickPlayer();
@@ -294,8 +336,24 @@ bool Lua_ItemsEqual(LuaItem* pItem1, LuaItem* pItem2);
 
 bool __fastcall Lua_IsFunction(LuaTable** in_EAX);
 
+uint Lua_LongJump(void (*func)(LuaTable*, undefined4*), undefined4* scriptObject);
+void Lua_ReturnFromLongJump(uint* param_2);
 
 
+
+// Functions that I'm pretty sure are called from Lua
+
+// Error Codes
+typedef UINT LuaErrorCode;
+#define BB_OK 1
+
+LuaErrorCode len(LuaTable* table);
+LuaErrorCode GetNumWStringLines(LuaTable* table);
+LuaErrorCode ConvertToWString(LuaTable* table);
+LuaErrorCode getplatform(LuaTable* table);
+LuaErrorCode StartKickVote(LuaTable* table);
+LuaErrorCode deg(LuaTable* table);
+LuaErrorCode FormatMemoryCard();
 
 // This jump table thing is making me think it's not a class but like a bugbear-made method system. But maybe that's just how classes are implemented in machine code and Ghidra is right?
 /*
@@ -317,7 +375,8 @@ void (*JMPTABLE_0067b6f8[])() = {
 // AutoClass 25
 class FileObject {
 public:
-	void (*vtable)(); // Array of functions, methods if you will. unused in my implementation because I made it a class instead
+	void (*vtable)();
+	// Array of functions, methods if you will. unused in my implementation because I made it a class instead
 
 	char buffer[0x4000]; // 0x4
 
@@ -329,18 +388,16 @@ public:
 	char* realFilePos;     // 0x400C - real file's filePos, gets increased by bytesRead
 	void* size;        // 0x4010 - returned by BvhFile_Func8 unless it's -1 - *0x4008 otherwise
 	HANDLE handle;      // 0x4014
-	uint fileattributes;         // 0x4018 - bitmask related to the parameters the file was opened with
+	uint fileattributes;         // 0x4018 - flags describing the file
 
-	// Two different filename properties, I'm thinking maybe it's for objects that need to load both a model and texture file?
 	char* filename1; // 0x401C
 	char* filename2; // 0x4020
+	// Two different filename properties, I'm thinking maybe it's for objects that need to load both a model and texture file?
 
 
 	DWORD FileObject_WriteFileToHandle(LPCVOID buffer, DWORD bytesToWrite);
 
 	void FileObject_SetFilePointer(int newLoc);
-
-	FileObject* FileObject_New(uint unaff_EBX, const char* filename_unaff_EDI);
 
 	void FileObject_Create(LPCSTR lpFilename, uint flags);
 
@@ -361,6 +418,7 @@ public:
 	FileObject* FileObject_ResetMaybe(int bFree);
 };
 
+FileObject* __fastcall FileObject_New(const char* filename_unaff_EDI, uint flags_unaff_EBX);
 void __fastcall FileObject_ClearEAX(FileObject* in_EAX);
 
 
@@ -371,14 +429,28 @@ struct YetAnotherFileObject
 {
 	HANDLE handle_0x0;
 	int size_0x4;
+
+	char* string_0x20c;
+	int sizeAgain_0x210;
+	int int_0x214;
+	char* string_0x218;
+	char* string_0x21c;
+	int int_0x220;
 };
-
-
 
 void OpenBFS(LPCSTR filename, YetAnotherFileObject* unaff_EDI);
 
+// INPUT
 
+// AutoClass23
+class KeyboardController
+{
+private:
+	void (*vftable_0x0)();
 
+	int int_0x12c;
+	BYTE byte_0x130;
 
-void DoNothing();
-void* Depointerize(void** pointer);
+	LRESULT Keyboard_Hook(uint param_1);
+	void* Keyboard_Unhook(BYTE param_1);
+};

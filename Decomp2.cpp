@@ -1,16 +1,21 @@
 // FlatOut 2 Decompilation
 
 // This is a decompilation of the GOG version of FO2.
-// As far as I'm aware, the DRM is the only difference between this and the Steam version, they share jump tables, function locations, and every variable that I've checked so far does the same thing.
+// The DRM is the only difference between this and the Steam version, once launched the memory layout of the game is identical from what I can tell.
+// The Epic Games executable is exactly the same as the GOG one, down to the checksum.
 
-// Bugbear used Visual Studio 2003 aka Visual Studio 6, which means we know the IDE, compiler, all that. But finding a copy these days is difficult.
+// Bugbear used Visual Studio 2003 aka Visual Studio 6, which means we know the IDE, compiler, all that. But finding a copy these days is difficult. I'm using 2022 for this recreation.
 // To remove the warnings about the unsafe string functions, add _CRT_SECURE_NO_WARNINGS to the Preprocessor definitions under Properties -> C/C++ -> Preprocessor
 
 // SCRAP Engine
-#include "Engine/SCRAP2.h"
+#include "Engine/SCRAP.h"
 
+// Standard Libraries
 #include <stdarg.h>
+#include <strsafe.h>
+#include <math.h>
 
+// Direct X
 // D3D9.DLL
 #include <d3d9.h>
 
@@ -27,30 +32,14 @@
 // IPHLPAPI.DLL
 #include <iphlpapi.h>
 
-// WINMM.DLL
+// WS2_32.DLL
 #include <winsock.h>
-
 #pragma comment(lib, "Ws2_32.lib")
 
 // Misc.
-#include <strsafe.h>
 #include <sys/stat.h>
-#include <math.h>
-// I'll start adding them back if I discover that it's not included in windows.h
-/*
-#include <combaseapi.h>
-#include <shellapi.h>
-#include <fileapi.h>
-#include <libloaderapi.h>
-#include <process.h>
-#include <synchapi.h>
-#include <winbase.h>
-#include <winsock.h>
-#include <timeapi.h>
-#include <memoryapi.h>
-#include <WinUser.h>
-#include <winreg.h>
-*/
+#include <intrin.h>
+
 
 
 /////////////////////////////////////////////////
@@ -62,7 +51,6 @@ DLGPROC g_dlgproc;
 
 LPCSTR lpOperation_0066ab90;
 
-// Whoops, I don't know how I got the previous interpretation.
 const char16_t* u_NO_TEXT_0066b38c = u"NO_TEXT";
 
 
@@ -277,18 +265,18 @@ struct Game {
 	bool ShowBonus = true;
 	bool ShowTutorials = true;
 	char DefaultPlayerName[7] = "PLAYER";
-	int Camera = 0; // 0 - 9
-	int Hud = 0;    // 0 - 4
+	BYTE Camera = 0; // 0 - 9
+	BYTE Hud = 0;    // 0 - 4
 };
 
 struct Control {
 	char ControllerGuid[33] = "00000000000000000000000000000000";
-	int Controller = 0;                     // 0 - 2
-	int ForceMagnitude = 100;               // 0 - 100
-	int ControllerSensitivity = 90;         // 0 - 100
-	int ControllerDeadzone = 0;             // 0 - 100
-	int ControllerSaturation = 90;          // 0 - 100
-	int ControllerLayout = 0;               // 0 - 10
+	BYTE Controller = 0;                     // 0 - 2
+	BYTE ForceMagnitude = 100;               // 0 - 100
+	BYTE ControllerSensitivity = 90;         // 0 - 100
+	BYTE ControllerDeadzone = 0;             // 0 - 100
+	BYTE ControllerSaturation = 90;          // 0 - 100
+	BYTE ControllerLayout = 0;               // 0 - 10
 	bool ForceFeedback = true;
 	float DigitalCenteringSpeed = 0.999f;   // 0.0 - 100.0
 	float DigitalSteeringMaxSpeed = 1.85f;  // 0.0 - 100.0
@@ -298,28 +286,28 @@ struct Control {
 struct Visual {
 	bool AlphaBlend = true;
 	bool SunFlare = true;
-	int TextureQuality = 4;       // 0 - 4
-	int TrackDetail = 2;          // 0 - 2
-	int PS2MotionBlurIngame = 32; // 0 - 255
-	int Visibility = 100;         // 0 - 100
+	BYTE TextureQuality = 4;       // 0 - 4
+	BYTE TrackDetail = 2;          // 0 - 2
+	BYTE PS2MotionBlurIngame = 32; // 0 - 255
+	BYTE Visibility = 100;         // 0 - 100
 };
 
 struct Audio {
-	int InterfaceMusicVolume = 50;  // 0 - 100
-	int InterfaceSfxVolume = 80;    // 0 - 100
-	int IngameMusicVolume = 50;     // 0 - 100
-	int IngameSfxVolume = 80;      // 0 - 100
-	int ChannelMode = 0;            // 0 - 2
+	BYTE InterfaceMusicVolume = 50;  // 0 - 100
+	BYTE InterfaceSfxVolume = 80;    // 0 - 100
+	BYTE IngameMusicVolume = 50;     // 0 - 100
+	BYTE IngameSfxVolume = 80;      // 0 - 100
+	BYTE ChannelMode = 0;            // 0 - 2
 	bool DopplerEffects = false;
 };
 
 struct Network {
-	uint Port = 23756;                     // 0 - 65536
-	uint BroadcastPort = 23757;            // 0 - 65536
-	int VoiceOutputVolume = 80;           // 0 - 100
-	int VoiceJitterMaxDelay = 10;         // 0 - 100
-	int VoiceJitterMaxVariation = 10;     // 0 - 100
-	int VoiceJitterInitialVariation = 2;  // 0 - 100
+	ushort Port = 23756;                     // 0 - 65536
+	ushort BroadcastPort = 23757;            // 0 - 65536
+	BYTE VoiceOutputVolume = 80;           // 0 - 100
+	BYTE VoiceJitterMaxDelay = 10;         // 0 - 100
+	BYTE VoiceJitterMaxVariation = 10;     // 0 - 100
+	BYTE VoiceJitterInitialVariation = 2;  // 0 - 100
 	float VoiceTalkingLevel = 15.f;       // 0.0 - 90.0
 	bool MutePlayerVoice = true;
 	bool MuteVoiceIngame = false;
@@ -354,10 +342,11 @@ uint version_0069c13c = 0;
 // If set to Germany in a US or Europe copy, the game will crash when loading into a map because it can't find the ragdoll models.
 
 
-void StartGame(int param_1)
+// There's already a function that is internally called StartGame so I had to change this one
+void StartStartingGame(int param_1)
 {
 	const char* version_string;
-	astruct_97* paVar1 = *(astruct_97**)(*int_008e8420 + 4);
+	LuaTable* table = *(astruct_97**)(*int_008e8420 + 4);
 	// So glad they used text
 	if (version_0069c13c == 1)
 	{
@@ -371,13 +360,14 @@ void StartGame(int param_1)
 	{
 		version_string = "VERSION_EUROPE";
 	}
-	//...
+	table->Lua_AddStringProperty(version_string);
+
 }
 
 void (*PTR_008e8418)(int);
 
-
-DWORD wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPCSTR lpCmdLine, int nShowCmd)
+// Turns out, this IS WinMain. IDA detected it immediately.
+DWORD WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPCSTR lpCmdLine, int nShowCmd)
 {
 	HINST_008da564 = hInstance;
 
@@ -387,13 +377,13 @@ DWORD wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPCSTR lpCmdLine, i
 
 	// Dealing with the setup flag
 	setupFlag_008da684 = 0;
-	if (lpCmdLine != "" && (stricmp(lpCmdLine, "-setup") || _stricmp(lpCmdLine, "setup")))
+	if (lpCmdLine != NULL && (_stricmp(lpCmdLine, "-setup") || _stricmp(lpCmdLine, "setup")))
 		setupFlag_008da684 = 1;
 
 	CoInitializeEx(NULL, 0);
 
-	int verCheck = CheckDirectXVersion((LPBYTE*)"4.09.00.0904");
-	if (verCheck == 0 && DialogBoxParamA(hInstance, (LPCSTR)0x83, NULL, (DLGPROC)BasicDlgProc, 0) == (INT_PTR)1)
+	int verCheck = CheckDirectXVersion((LPBYTE)"4.09.00.0904");
+	if (verCheck == 0 && DialogBoxParamA(hInstance, (LPCSTR)0x83, NULL, (DLGPROC)BasicDlgProc, 0) == 1)
 		return 0xffffffff;
 
 	// Sets unkn_008da6a0 to 1
@@ -444,7 +434,7 @@ DWORD wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPCSTR lpCmdLine, i
 	if (iVar1 != 0)
 		//FreeALotOfMemory();
 
-		CoUninitialize();
+	CoUninitialize();
 	if (UINT_008e855c != 0)
 		UINT_008e855c--;
 
@@ -558,13 +548,12 @@ uint ASPI_Initialize(char param_1)
 	if (CHAR_006a32cc != NULL)
 		return 0;
 
-	uint* puVar7 = &UINT_006a328c;
 	int errorCode, pvVar5;
-	for (int iVar3 = 8; iVar3 != 0; iVar3 -= 1)
-	{
-		*puVar7 = 0;
-		puVar7 += 1;
-	}
+
+	// Ghidra says there's a for loop, but it's done in a single STOSD instruction that is basically a memset but instead of bytes it's words.
+	__stosd((unsigned long*)&UINT_006a328c, 0, 8);
+
+
 	INT_007a32e4 = 0;
 	if ((param_1 == NULL))//&& (FUN_00621944() != NULL))
 	{
@@ -573,13 +562,8 @@ uint ASPI_Initialize(char param_1)
 	}
 	else
 	{
-		// Clearing an 8-byte buffer
-		puVar7 = &UINT_006a328c;
-		for (int iVar3 = 8; iVar3 != 0; iVar3--)
-		{
-			*puVar7 = 0;
-			puVar7 += 1;
-		}
+		
+		__stosd((unsigned long*)&UINT_006a328c, 0, 8);
 
 		char* local_804;
 		INT_006a32e4 = 0;
@@ -636,7 +620,7 @@ exitPoint:
 // Takes an expected version and compares that to the current version
 // stored in the registry. 
 
-int CheckDirectXVersion(LPBYTE* expectedVersion)
+int CheckDirectXVersion(LPBYTE expectedVersion)
 {
 	HKEY hkey;
 	LPBYTE lpdata;
@@ -645,17 +629,17 @@ int CheckDirectXVersion(LPBYTE* expectedVersion)
 	LSTATUS oStatus = RegOpenKeyExA(HKEY_LOCAL_MACHINE, "SOFTWARE\\Microsoft\\DirectX", 0, 1, &hkey);
 
 	if (oStatus < 0)
-		return oStatus & 0xffffff00;
+		return oStatus & 0xFFFFFF00;
 
 	LSTATUS qStatus = RegQueryValueExA(hkey, "Version", NULL, NULL, lpdata, lpcbdata);
 	LSTATUS cStatus = RegCloseKey(hkey);
 
 	if (qStatus < 0 || lpcbdata > (LPDWORD)0x20)
-		return cStatus & 0xffffff00;
+		return cStatus & 0xFFFFFF00;
 
 
-	LPBYTE* dataptr = &lpdata;
-	LPBYTE currentData;
+	LPBYTE dataptr = lpdata;
+	BYTE currentData;
 	bool isOlder;
 
 	// Goes through the version string, and if it reaches equal or greater numbers,
@@ -676,8 +660,8 @@ int CheckDirectXVersion(LPBYTE* expectedVersion)
 		if (currentData != expectedVersion[1])
 			break;
 
-		dataptr = dataptr + 2;
-		expectedVersion = expectedVersion + 2;
+		dataptr += 2;
+		expectedVersion += 2;
 
 		if (currentData == 0)
 			return 1;
@@ -686,8 +670,9 @@ int CheckDirectXVersion(LPBYTE* expectedVersion)
 	// I worked out the complicated version and converted it to:
 	uint result = isOlder ? -1 : 1;
 
-	// Concatenate by shifting over an extra bit and or-ing.
-	return (result << 9) | (result > -1);
+	// I made a couple mistakes with this line, it's concatenating bytes, and it shifted right initially.
+	// Is this faster than ANDing?
+	return ((result >> 8) << 8) | (result > -1);
 }
 
 IDirect3D9* D3D9_008da784;
@@ -696,7 +681,7 @@ LPDIRECT3DDEVICE9 LPDIRECT3DDEVICE9_008da788;
 
 LRESULT WndProcWithMoreSteps(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
 
-HWND CreateD3DWindow(HWND parent, HINSTANCE hInstance, LPCSTR title, HICON icon, HCURSOR cursor, astruct_110* param_6, uint* param_7, BYTE param_8, uint flags, int* in_EAX)
+HWND CreateD3DWindow(HWND parent, HINSTANCE hInstance, LPCSTR title, HICON icon, HCURSOR cursor, astruct_110* param_6, uint* param_7, BYTE param_8, uint flags, register int* in_EAX)
 {
 	int posX;
 	int posY;
@@ -852,7 +837,7 @@ HWND CreateD3DWindow(HWND parent, HINSTANCE hInstance, LPCSTR title, HICON icon,
 	}
 }
 
-// I thought the 2 unknowns didn't make any sense, but the below function makes it clear this list used to be different.
+// It seems like the second unknown can be swapped out, at least on other functions
 D3DFORMAT D3DFMTs_0069bfe8[20] = {
 	D3DFMT_UNKNOWN,
 	D3DFMT_UNKNOWN,
@@ -960,11 +945,18 @@ uint UINT_008da7d8;
 
 BYTE BYTE_008da490[20];
 
-// For every D3DFORMAT, Run a CheckDeviceFormat() and if it succeeds, set a corrosponding bit in the above byte array.
-// If every test passes, every byte in BYTE_008da490 should be 190, or 1011 1110
+// For every D3DFORMAT, Run a CheckDeviceFormat() and if it succeeds, set a corrosponding flag.
+// So in binary it can be represented like C-TS cvt-
+// Where:
+// c indicates the format can be used in a cube texture
+// v indicates the format can be used in a volume texture
+// t indicates the format can be used in a 2D texture
+// C indicates the format can be used in a cube texture for a render target
+// T indicates the format can be used in a 2D texture for a render target
+// S indicates the format can be used on a surface for a render target
 void HardwareCompatibilityTest(int struct_1, D3DFORMAT extraout_EDX)
 {
-	D3DFMT_0069bfec = D3DFMT_008da418;
+	D3DFMTs_0069bfe8[1] = D3DFMT_008da418;
 	UINT_008da7d8 = GetIndexOfDXFormat(D3DFMT_008da418);
 	UINT uVar1 = *(uint *)(struct_1 + 0x70);
 	// Starts with the second D3DFMT_UNKNOWN, so this function was also not updated after the list was changed.
@@ -1004,6 +996,7 @@ void HardwareCompatibilityTest(int struct_1, D3DFORMAT extraout_EDX)
 	return;
 }
 
+
 uint UINT_006d6814;
 uint* UINT_006d68f4;
 uint UINT_006d68f8;
@@ -1027,7 +1020,7 @@ struct astruct_164 {
 	uint unk_0x10, unk_0x14, unk_0x18, unk_0x20;
 };
 
-INT_PTR DlgProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
+INT_PTR DlgProc_SettingsPanel(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
 
 // Creating setup window
 //
@@ -1036,8 +1029,8 @@ int CreateSetupWindow(astruct_140* param_1, HINSTANCE hInst, int showSetup, int 
 	param_1->hinst_0x58 = hInst;
 
 	// Retrieve the version from Lua, which is kinda strange since that variable is already supposed to contain the version, it's where Lua got it from.
-	//version_0069c13c = FUN_00523500();
-	//copyOfVersion_008da550 = FUN_00523500();
+	//version_0069c13c = Lua_GetVersion();
+	//copyOfVersion_008da550 = Lua_GetVersion();
 
 	uint* uVar7;
 	uint uVar13;
@@ -1096,7 +1089,7 @@ int CreateSetupWindow(astruct_140* param_1, HINSTANCE hInst, int showSetup, int 
 			if (showSetup != 0)
 			{
 				HGDIOBJ_006d67b8 = LoadImageA(hInst, (LPCSTR)0x82, IMAGE_BITMAP, 0, 0, LR_DEFAULTCOLOR);
-				INT_PTR IVar10 = DialogBoxParamA(hInst, (LPCSTR)0x65, NULL, (DLGPROC)DlgProc, 0);
+				INT_PTR IVar10 = DialogBoxParamA(hInst, (LPCSTR)0x65, NULL, (DLGPROC)DlgProc_SettingsPanel, 0);
 				DeleteObject(HGDIOBJ_006d67b8);
 				if (IVar10 == 0)
 					return 0;
@@ -1219,7 +1212,7 @@ LRESULT DeleteUpdateThread()
 
 DLGPROC Dlgproc;
 
-INT_PTR DlgProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
+INT_PTR DlgProc_SettingsPanel(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
 	HWND hDlg = hWnd;
 	LRESULT LVar6;
@@ -1500,168 +1493,60 @@ uint GetKeyFromRegistry(char* keyName, LPBYTE out_data, DWORD size_of_out_data)
 	return output;
 }
 
-int* ReadCLSIDKey(HKEY hkey, LPCSTR subKey, int param3, char* param4)
+static char* ReadCLSIDKey(HKEY hkey, LPCSTR subKey, int param_3, DWORD cbData)
 {
 	PHKEY result;
-	HKEY local_c;
-	char* Dst = param4;
-	if (param4 == nullptr)
+	HKEY hKey;
+	char* output = (char*)cbData;
+	if (cbData == 0)
 	{
 		if (RegOpenKeyExA(hkey, subKey, 0, KEY_READ, result) == ERROR_SUCCESS)
 		{
 			DWORD keyType = 1;
-			LPBYTE data;
-			LSTATUS LVar2 = RegQueryValueExA(local_c, "clsid", NULL, &keyType, data, (LPDWORD)&param4);
-			char* local_11c;
-			BYTE local_3e4[0x200];
-			// Using an uninititialized string as the keyName.
-			uint uVar3 = GetKeyFromRegistry(local_11c, local_3e4, 0x200);
-			if ((LVar2 == ERROR_SUCCESS))
+			cbData = 0x100;
+			char data[200];
+
+			if (RegQueryValueExA(hKey, "clsid", NULL, &keyType, (LPBYTE)data, &cbData) == ERROR_SUCCESS)
 			{
-				
+				char* keyName;
+				BYTE out_data[0x200];
+				// Using an uninititialized string as the keyName.
+				if (GetKeyFromRegistry(keyName, out_data, 0x200) == ERROR_SUCCESS)
+				{
+					if ((output = (char*)malloc(0x29C)) != NULL)
+					{
+						memset(output, 0, 0x29C);
+						*(int*)output = param_3;
+
+						OLECHAR olestr[0x100];
+						_GUID clsid;
+
+						MultiByteToWideChar(0, 0, data, -1, olestr, 100);
+						if (CLSIDFromString(olestr, &clsid) == ERROR_SUCCESS)
+							memcpy(output + 1, &clsid, 0x10);
+						
+						keyType = 1;
+						cbData = 0x100;
+
+						if (RegQueryValueExA(hKey, "description", NULL, &keyType, (LPBYTE)data, &cbData) == ERROR_SUCCESS)
+							subKey = data;
+
+						strcpy(output + 0x85, subKey);
+					}
+				}
 			}
+			
 		}
-	}
-}
-
-
-
-
-/////////////////////////////////////////////////
-//
-// Input
-// 
-/////////////////////////////////////////////////
-
-BYTE lpKeyState_008d7d60[0x40];
-BYTE lpKeyState_008d7e60[0x40];
-HHOOK HHOOK_008da738;
-
-
-LRESULT Keyboard_HookProc(int code, WPARAM wParam, LPARAM lParam);
-
-HOOKPROC nextHook = (HOOKPROC)Keyboard_HookProc;
-
-LRESULT Keyboard_Hook(void* cThis, uint param_1)
-{
-	BYTE* puVar2 = lpKeyState_008d7e60;
-	for (int i = 0x40; i != 0; i--)
-	{
-		*puVar2 = 0;
-		puVar2++;
-	}
-
-	puVar2 = lpKeyState_008d7d60;
-	for (int i = 0x40; i != 0; i--)
-	{
-		*puVar2 = 0;
-		puVar2++;
-	}
-
-	if (HHOOK_008da738 == NULL)
-	{
-		DWORD dwThreadId = GetCurrentThreadId();
-		HHOOK_008da738 = SetWindowsHookExA(2, nextHook, NULL, dwThreadId);
-		if (HHOOK_008da738 == NULL)
-		{
-			//uStack_2c = 0xF;
-			//uStack_30 = 0;
-			//uStack_40 = 0;
-			//FUN_0055b050(auStack_44, "KeyboardController: Unable to hook keyboard", 0x2B);
-			//appuStack_28[0] = &PTR_FUN_006578c4;
-			//uStack_4 = 0xF;
-			//uStack_8 = 0;
-			//uStack_18 = 0;
-			//FUN_0055ae50(auStack_1c, auStack_44, 0, 0xFFFFFFFF);
-			// Some kind of exception code, I'll just do this for now.
-			throw EXCEPTION_INVALID_HANDLE;
-		}
-	}
-}
-
-int DAT_008da740;
-uint DAT_008da734;
-int* PTR_008e844c;
-
-LRESULT Keyboard_HookProc(int code, WPARAM wParam, LPARAM lParam)
-{
-	if (code < 0)
-	{
-		CallNextHookEx(HHOOK_008da738, code, wParam, lParam);
-		return;
-	}
-
-	uint wVirtKey = wParam & 0xFF;
-	if (lParam < 0)
-	{
-		if (lpKeyState_008d7e60[wVirtKey] < 0)
-			DAT_008da740--;
-
-		lpKeyState_008d7e60[wVirtKey] &= 0x7F;
+		RegCloseKey(hKey);
 	}
 	else
 	{
-		// In Binary: 0?00 0000 0000 0000 0000 0000 0000 0000
-		if (DAT_008da734 || ((lParam & 0x40000000U) == 0))
-		{
-			if (lpKeyState_008d7e60[wVirtKey] > -1)
-				DAT_008da740--;
-
-			lpKeyState_008d7e60[wVirtKey] ^= 1;
-			lpKeyState_008d7e60[wVirtKey] |= 0x80;
-
-			lpKeyState_008d7d60[wVirtKey] += 1;
-		}
-		if (PTR_008e844c[11] != 0)
-		{
-			if (((lParam & 0x40000000U) != 0) && (PTR_008e844c[5] == 0))
-			{
-				CallNextHookEx(HHOOK_008da738, code, wParam, lParam);
-				return;
-			}
-
-			WCHAR convertedKey = 0;
-			// local_4 is AND'd before it's even initialized.
-			uint local_4;
-			local_4 &= 0xFFFF0000;
-			int iVar1 = ToUnicode(wVirtKey, lParam, lpKeyState_008d7e60, &convertedKey, 8, 0);
-			if (iVar1 == 1)
-				// Treat local_4 as an array of 2 shorts, take the second one and concatentate with local_20.
-				local_4 = (((short*)&local_4)[1] << 16) | (short)convertedKey;
-
-			LPARAM LVar4;
-			uint uVar3;
-			iVar1 = ToAscii(wVirtKey, lParam, lpKeyState_008d7e60, (LPWORD)&convertedKey, 0);
-			if (iVar1 == -1)
-			{
-				uVar3 = convertedKey & 0xFFFF;
-				wVirtKey = 0;
-				LVar4 = 0;
-			}
-			else
-			{
-				if (iVar1 != 0)
-				{
-					if (iVar1 > 0)
-					{
-						int iVar2 = 0;
-						do
-						{
-							//FUN_00550350(&local_20 + (iVar2 * 2), wVirtKey, 0, local_4);
-							iVar2++;
-						} while (iVar2 < iVar1);
-					}
-					goto hookExit;
-				}
-				uVar3 = 0;
-				LVar4 = lParam;
-			}
-			//FUN_00550350(uVar3, wVirtKey, LVar4, local_4);
-		}
+		int** ppiVar1 = (int**)(cbData + 0x298);
+		int* piVar4 = ReadCLSIDKey(hKey, subKey, param_3 + 1, (DWORD)*ppiVar1);
+		*ppiVar1 = piVar4;
 	}
-hookExit:
-	CallNextHookEx(HHOOK_008da738, code, wParam, lParam);
-	return;
+
+	return output;
 }
 
 
@@ -1952,10 +1837,25 @@ void HandleGameInvite(undefined4 self, char** param_2[])
 	return;
 }
 
+struct ProfileStruct
+{
+	int int_0x0;
+	int int_0x4;
+	void* unkn_0x8;
+	void** unkn_0x18;
+	char buffer_0x28[256]; // Contains all the user data, it seems like it's all one buffer but it could be different properties.
+	int int_0x130;
+	int int_0x134;
+	int int_0x138;
+
+	int int_0x140;
+	int int_0x144;
+};
+
 struct astruct_166
 {
 	// 4 undefined bytes at offset 0x0
-	int* pbuffer_0x4;
+	ProfileStruct* profile_0x4;
 	int int_0x8;
 	char* ptr_0xc;
 	uint uint_0x10;
@@ -1963,14 +1863,166 @@ struct astruct_166
 	undefined4 unkn_0x18;
 };
 
-void SearchForLobbies(char** param_1, astruct_166* param_2)
+class LobbyManager
 {
-	// Some kind of struct, unsure of what it is yet
-	if ((param_2->int_0x8 == 0) && ((GetTickCount() - (DWORD)(param_2->pbuffer_0x4[0x51])) > 60000))
+private:
+	char* string_0x0;
+
+	char* sesskey_0x198;
+	char* profileid_0x1a0;
+	char* namespaceid_0x484;
+
+public:
+
+	void LobbyStruct_MemoryRelated(LobbyManager** pManager, void** mem, size_t newSize, uint length);
+
+	void LobbyStruct_AddString(void** param_2, char* in_string)
 	{
-		param_2->pbuffer_0x4[0x50] = 1;
-		ComplicatedCopyString(param_1, 0xD02, "The search timed out");
+		this->LobbyStruct_MemoryRelated(param_2, String_GetLength(in_string));
 	}
+};
+
+// Copies 256 characters from the in_string to the out_string, setting the
+// 256th to NULL, and the 1072nd to param_2
+void __cdecl ComplicatedCopyString(LobbyManager** pManager, uint param_2, const char* in_string)
+{
+	char* _Dest = pManager->string_0x0;
+	strncpy(_Dest, in_string, 0x100);
+	_Dest[0xff] = NULL;
+	*((uint*)_Dest[0x430]) = param_2;
+	return;
+}
+
+
+
+void SearchForLobbies(LobbyManager** pManager, astruct_166* param_2)
+{
+	ProfileStruct* profile = param_2->profile_0x4;
+	LobbyManager* manager;
+	UINT errorCode = ERRORCODE_SUCCESS_00683798;
+	UINT errorCode2 = ERRORCODE_SUCCESS_00683798;
+	// Some kind of struct, unsure of what it is yet
+	if ((param_2->int_0x8 == 0) && ((GetTickCount() - profile->int_0x144) > 60000))
+	{
+		profile->int_0x140 = 1;
+		ComplicatedCopyString(pManager, 0xD02, "The search timed out");
+		//FUN_005f52f0(pManager, 3, 0);
+		ReportFailureUnless(errorCode);
+		return;
+	}
+
+	void** ppvVar1 = profile->unkn_0x18;
+	int iVar4;
+	while (true)
+	{
+		//iVar4 = FUN_005f11d0(pManager, profile->int_0x4, ppvVar1, &local_460, 1, "SM");
+		if (iVar4) goto LAB_005edeae;
+		if (param_2->int_0x14 != 1) break;
+		//iVar4 = FUN_005eb1c0(pManager, profile->int_0x4, &local_45c);
+		if (iVar4) goto LAB_005edeae;
+		if (local_45c == 4)
+		{
+			ComplicatedCopyString(pManager, 0xD01, "Could not connect to the search manager.");
+			//FUN_005f52f0(manager, 4, 0);
+			ReportFailureUnless(errorCode2);
+			return;
+		}
+		if (local_45c == 3)
+		{
+			iVar4 = profile->int_0x0;
+			if (iVar4 == 1)
+			{
+				LobbyStruct_AddString(pManager, ppvVar1, "\\search\\");
+				LobbyStruct_AddString(pManager, ppvVar1, "\\sesskey\\");
+				LobbyStruct_AddValue(pManager, ppvVar1, manager->sesskey_0x198);
+				LobbyStruct_AddString(pManager, ppvVar1, "\\profileid\\");
+				LobbyStruct_AddValue(pManager, ppvVar1, manager->profileid_0x1a0);
+				LobbyStruct_AddString(pManager, ppvVar1, "\\namespaceid\\");
+				LobbyStruct_AddString(pManager, ppvVar1, manager->namespaceid_0x484);
+				if (profile->buffer_0x28[0] != NULL)
+				{
+					LobbyStruct_AddString(pManager, ppvVar1, "\\nick\\");
+					LobbyStruct_AddValue(pManager, ppvVar1, profile->buffer_0x28);
+				}
+				if (profile->buffer_0x28[0x1F] != NULL)
+				{
+					LobbyStruct_AddString(pManager, ppvVar1, "\\uniquenick\\");
+					LobbyStruct_AddValue(pManager, ppvVar1, &profile->buffer_0x28[0x1F]);
+				}
+				if (profile->buffer_0x28[0x34] != NULL)
+				{
+					LobbyStruct_AddString(pManager, ppvVar1, "\\email\\");
+					LobbyStruct_AddValue(pManager, ppvVar1, &profile->buffer_0x28[0x34]);
+				}
+				if (profile->buffer_0x28[0x67] != NULL)
+				{
+					LobbyStruct_AddString(pManager, ppvVar1, "\\firstname\\");
+					LobbyStruct_AddValue(pManager, ppvVar1, &profile->buffer_0x28[0x67]);
+				}
+				if (profile->buffer_0x28[0x86] != NULL)
+				{
+					LobbyStruct_AddString(pManager, ppvVar1, "\\lastname\\");
+					LobbyStruct_AddValue(pManager, ppvVar1, &profile->buffer_0x28[0x86]);
+				}
+
+				if (profile->int_0x130)
+				{
+					LobbyStruct_AddString(pManager, ppvVar1, "\\icquin\\");
+					LobbyStruct_AddValue(pManager, ppvVar1, profile->int_0x130);
+				}
+
+				if (profile->int_0x134)
+				{
+					LobbyStruct_AddString(pManager, ppvVar1, "\\skip\\");
+					LobbyStruct_AddValue(pManager, ppvVar1, profile->int_0x134);
+				}
+			}
+			else if (iVar4 == 2)
+			{
+				LobbyStruct_AddString(pManager, ppvVar1, "\\nicks\\");
+				LobbyStruct_AddString(pManager, ppvVar1, "\\email\\");
+				LobbyStruct_AddString(pManager, ppvVar1, &profile->buffer_0x28[0x34]);
+				LobbyStruct_AddString(pManager, ppvVar1, "\\pass\\");
+				char* pcVar5 = &profile->buffer_0x28[0xA5];
+				LobbyStruct_AddString(pManager, ppvVar1, pcVar5);
+				iVar4 = String_GetLength(pcVar5);
+				//FUN_005e4900(0x79707367);
+				int iVar14 = 0;
+				char local_254[256];
+				int iVar14, iVar6;
+				if (iVar4 > 0)
+				{
+					do
+					{
+						iVar6 = FUN_005e4920(0, 0xFF);
+						local_254[iVar14] = profile->buffer_0x28[iVar14 + 0xA5];
+						iVar14++;
+					} while (iVar14 < iVar4);
+				}
+			}
+		}
+	}
+}
+
+void __fastcall ReportFailureUnless(UINT errorCode)
+{
+	if (errorCode == ERRORCODE_SUCCESS_00683798)
+		return;
+
+	//_report_failure();
+	__report_gsfailure();
+}
+
+void DoNothingButItsLikeARealFunction(char out_string[0x400], undefined4 param_1, char* format, ...)
+{
+
+	va_list args;
+	va_start(args, format);
+
+	vsprintf(out_string, format, args);
+
+	UINT errorCode = ERRORCODE_SUCCESS_00683798;
+	ReportFailureUnless(errorCode);
 }
 
 
@@ -2005,6 +2057,48 @@ struct astruct_151 {
 // PropertyDb
 // 
 /////////////////////////////////////////////////
+
+struct PropertyDbItem
+{
+	const char* name_0x0;
+	int flagsMaybe_0x4;
+	void* var_0x8; // The address of the variable itself
+};
+
+int MinScreenSize_008dd460;
+int Propability_008dd464;
+int Lifetime_008dd468;
+int AngleSpeed_0067cc54;
+int Size_008dd474;
+int Grow_008dd47c;
+int MinTurbulence_0067cc3c;
+int AddSpeedTurbulence_008dd488;
+int AddLoadTurbulence_008dd48c;
+int MinVelocity_008dd490;
+int AddLoadVelocity_008dd494;
+int Damping_008dd498;
+int MinAlpha_008dd49c;
+int AddLoadAlpha_008dd4a0;
+int FadePeak_008dd4a4;
+
+PropertyDbItem mappedTable_006679b0[] =
+{
+	{ "MinScreenSize", 0x407, &MinScreenSize_008dd460 },
+	{ "Propability", 0x407, &Propability_008dd464 },
+	{ "Lifetime", 0x809, &Lifetime_008dd468 },
+	{ "AngleSpeed", 0x407, &AngleSpeed_0067cc54 },
+	{ "Size", 0x809, &Size_008dd474 },
+	{ "Grow",  0x809, &Grow_008dd47c },
+	{ "MinTurbulence", 0x407,& MinTurbulence_0067cc3c },
+	{ "AddSpeedTurbulence", 0x407, &AddSpeedTurbulence_008dd488 },
+	{ "AddLoadTurbulence", 0x407, &AddLoadTurbulence_008dd48c },
+	{ "MinVelocity", 0x407, &MinVelocity_008dd490 },
+	{ "AddLoadVelocity", 0x407, &AddLoadVelocity_008dd494 },
+	{ "Damping", 0x407, &Damping_008dd498 },
+	{ "MinAlpha", 0x407, &MinAlpha_008dd49c },
+	{ "AddLoadAlpha", 0x407, &AddLoadAlpha_008dd4a0 },
+	{ "FadePeak", 0x407, &FadePeak_008dd4a4 }
+};
 
 // AutoClass 9
 // I thought this was the Lua interpreter, but I think it's exclusively a database thing.
@@ -2158,7 +2252,7 @@ int PropertyDb_AccessProperty(char* in_EAX)
 		iVar6 = -(int)in_EAX;
 		do
 		{
-			// Copes the string in a strange way, right now I don't know what it means.
+			// Copies the string in a strange way, right now I don't know what it means.
 			currentChar = *in_EAX;
 			in_EAX[local_100[iVar6]] = currentChar;
 			in_EAX += 1;
@@ -2205,14 +2299,6 @@ int PropertyDb_AccessProperty(char* in_EAX)
 	}
 	return 0;
 }
-
-
-
-
-
-
-
-
 
 
 // It's effectively (floatA >= floatB)
@@ -2373,7 +2459,8 @@ void __fastcall GetInfoOnFile(int unaff_EBX, int unaff_ESI)
 
 }
 
-/*
+void (**PTR_JMPTABLE_008da700)()  = NULL;
+
 void LoadBinaryDatabase(char *flags)
 {
 	int* piVar1;
@@ -2386,7 +2473,8 @@ void LoadBinaryDatabase(char *flags)
 	uint local_8;
 	undefined4* paVar4;
 	void* puVar4;
-	UINT_008da700 = 0;
+
+	PTR_JMPTABLE_008da700 = NULL;
 	free(MemoryPointer);
 	MemoryPointer = NULL;
 	memAllocationSize = 0;
@@ -2432,7 +2520,6 @@ void LoadBinaryDatabase(char *flags)
 	CreateErrorMessageAndDie("Failed to load binary database \'%s\'!");
 	return;
 }
-*/
 
 
 
@@ -2458,7 +2545,7 @@ bool WriteCharToStream(char in_char, FILE* file)
 	return fputc(in_char, file) != -1;
 }
 
-// Still confused about this one
+// I'm not very familiar with FPUs, so I don't know what's going on.
 uint SetFPUCW(ushort in_FPUControlWord)
 {
 	uint copyOfWhat;
@@ -2471,7 +2558,41 @@ uint SetFPUCW(ushort in_FPUControlWord)
 	return copyOfWhat << 2 | in_FPUControlWord;
 }
 
+/////////////////////////////////////////////////
+//
+// Threads
+// 
+/////////////////////////////////////////////////
 
+HANDLE CreateThreadAndSetPriority(const char* name, LPTHREAD_START_ROUTINE lpStartAddress, LPVOID lpParameter, int priorityKinda)
+{
+	DWORD local_8;
+	HANDLE hThread = CreateThread(NULL, 0, lpStartAddress, lpParameter, 0, &local_8);
+
+	// Ghidra suggests the original was an else-if chain but I thought this looked cleaner
+	int nPriority;
+	switch (priorityKinda)
+	{
+	case -1:
+	case 2:
+		nPriority = priorityKinda;
+		break;
+
+	case 0:
+		nPriority = 1;
+		break;
+
+	case 3:
+		nPriority = 0xF;
+		break;
+
+	default:
+		return hThread;
+	}
+
+	SetThreadPriority(hThread, nPriority);
+	return hThread;
+}
 
 
 /////////////////////////////////////////////////
@@ -2479,6 +2600,64 @@ uint SetFPUCW(ushort in_FPUControlWord)
 // Misc.
 // 
 /////////////////////////////////////////////////
+
+// So far I've found 7 copies of this function in different spots, maybe they are different types of empty PROC functions?
+void DoNothing()
+{
+	return;
+}
+void DoNothingAgain()
+{
+	return;
+}
+void DoNothingTheThird()
+{
+	return;
+}
+void DoNothing4()
+{
+	return;
+}
+void DoNothing5()
+{
+	return;
+}
+void DoNothing6()
+{
+	return;
+}
+// There were so many I lost count when I named this one
+void DoNothing8()
+{
+	return;
+}
+
+// Function that doesn't do anything but apparently was for debug logging.
+uint DEBUGLOG()
+{
+	return 0;
+}
+
+void MoveToEAX(void* param_1)
+{
+	_asm
+	{
+		MOV EAX, param_1
+	}
+}
+
+void sprintf_strange(undefined4 param_1, char* format, ...)
+{
+	va_list list;
+	va_start(list, format);
+
+	// This function reaches backwards into the stack to get the string to copy to.
+	char* local_404 = (char*)((&param_1) - 0x400);
+
+	errorCode = ERRORCODE_SUCCESS_00683798;
+	vsprintf(local_404, format, list);
+	ReportFailureUnless(errorCode); // Does this do anything?
+}
 
 // Here's the thing: nearly every time this function is called,
 // It's given the DoNothing() function.
@@ -2501,8 +2680,44 @@ void memsetWithOffset(void** Dst, uint Offset, int Val, size_t Size)
 	return;
 }
 
+
 undefined4 Depointerize(undefined4* output)
 {
 	return *output;
 }
+
+
+/////////////////////////////////////////////////
+//
+// Pure Assembly
+// 
+/////////////////////////////////////////////////
+// 
+// Functions where the p-code view doesn't really tell you anything, so I imagine it was written in assembly.
+// I've never written assembly functions in C, do I just put it under my own labels like so, or do I wrap it in a C function? I guess it's easy to fix if I didn't do it right.
+//
+__asm
+{
+	SetALRegisterTo1:
+		mov al, 0x1
+		ret
+
+	SetALRegisterTo1Again:
+		mov al, 0x1
+		ret
+
+	SetEAXTo1:
+		mov eax, 0x1
+		ret
+
+	SetEAXTo6:
+		mov eax, 0x6
+		ret
+}
+
+
+
+
+
+
 

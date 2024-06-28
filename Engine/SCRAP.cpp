@@ -4,19 +4,20 @@
 // 
 /////////////////////////////////////////////////
 
-// My decompilation of FlatOut 2's ROMU
-// Code will be moved here when I find it in the other games
+// My on-going recreation of ROMU based on decompiling FlatOut 2
 
 // ROMU is always spelled with capitals, so I assumed it was an acronym, but it turns out it's the finnish word for scrap metal.
 // SCRAP it is.
-#include "SCRAP2.h"
+#include "SCRAP.h"
+
+// Code will be moved here when I find the same functions, structs, or classes in the other games, or when it depends on functions, structs, or classes already in here.
+// It's extremely similar to 1 and UC's ROMU but there are enough changes, especially in the locations of things that it would make more sense to re-write it to match each game.
+
 
 // This build is dated September 20th, 2004, which is a couple months before FlatOut 1 released.
-// I checked, and I guess they considered the changes to be very small
-// ROMU v0.28b
+// I checked, and they forgot to update the string, unless they considered the changes to be that small.
+// SCRAP v0.28b
 const char* verString_00698b4c = "Version 0.28 build 2004.09.20";
-
-
 
 
 /////////////////////////////////////////////////
@@ -44,7 +45,7 @@ int g_slashOverride = 0;
 // If mode is not 0:
 //
 // Starts at the location after the first NULL in the out_string
-// If mode is 3, or g_slashOverride is 0, it'll convert slashes to backslashes
+// If mode is 3, or g_slashOverride is 0, it'll convert slashes to backslashes and vise-versa
 // By the end, in_string will point at the character after the ending NULL
 int SlashConvertString(uchar* in_string, int mode, uchar* out_string)
 {
@@ -107,12 +108,13 @@ int SlashConvertString(uchar* in_string, int mode, uchar* out_string)
 		{
 			in_string = in_string + 1;
 			if (g_slashOverride == 0 || mode == 3)
+			{
 				if (currentChar == '/')
-				{
 					currentChar = '\\';
-				}
 				else if (currentChar == '\\')
 					currentChar = '/';
+			}
+				
 
 			// Converting to lowercase
 			lenOfData = isupper(currentChar);
@@ -144,37 +146,25 @@ int String_Compare(char* string1, char* string2)
 	return char1 - char2;
 }
 
-// My own addition to make other functions easier to read
-bool String_Equal(char* string1, char* string2, uint lengthOfString1)
-{
-	bool theSame = true;
-	uint iterations = lengthOfString1;
-	do
-	{
-		if (iterations == 0) break;
-		iterations--;
-		theSame = *string1 == *string2;
-		string1++;
-		string2++;
-	} while (theSame);
-	return theSame;
-}
-
 // The same as String_Compare except safer.
+// but if string2's length is less than maxLength, it'll produce an unintended result.
 int String_Compare_s(char* string1, char* string2, int maxLength)
 {
 	char char1, char2;
 	int iVar3 = 0;
+
 	do
 	{
 		char1 = *string1;
 		char2 = *string2;
-		string1 += 1;
-		string2 += 1;
-		iVar3 += 1;
+		string1++;
+		string2++;
+		iVar3++;
+
 		if (char1 == NULL || char1 != char2) break;
+
 	} while (iVar3 < maxLength);
-	// So it either returns the negative value of char2, or 0
+
 	return char1 - char2;
 }
 
@@ -190,18 +180,19 @@ char String_CompareEnd(char* out_string, char* in_string, int length)
 			if (*out_string != out_string[difference])
 				return *out_string - out_string[difference];
 
-			out_string = out_string += 1;
-			length -= 1;
+			out_string++;
+			length--;
 		} while (length > 0);
 	}
 	return NULL;
 }
 
 // They have a String_GetLength function but there are a lot of places that counted the string manually.
+// Did the person who wrote this forget to tell anyone else about it? Was it written later and those functions were already implemented?
 // I just decided to replace them with a GetLength call
-int String_GetLength(char* in_string)
+int String_GetLength(const char* in_string)
 {
-	char* tempPtr = in_string;
+	char* tempPtr = (char*)in_string;
 	while (*tempPtr != NULL)
 		tempPtr++;
 
@@ -245,7 +236,7 @@ char* String_CopySubstring(char* out_string, char* in_string, int length)
 }
 
 // Appends the in_string to the end of the out_string.
-// Finds the first NULL in the out_string and starts there.
+// Finds the first NULL in the out_string and starts copying from there.
 // It returns the starting pointer to the out_string, but my own experimenting tells me that the original isn't modified anyways, the function is given a copy of the pointer.
 char* String_Append(char* out_string, const char* in_string)
 {
@@ -290,17 +281,6 @@ char* String_AppendSubstring(char* out_string, char* in_string, int length)
 	return original;
 }
 
-// Copies 256 characters from the in_string to the out_string, setting the
-// 256th to NULL, and the 1072nd to param_2
-void __cdecl ComplicatedCopyString(char** out_string, uint param_2, const char* in_string)
-{
-	char* _Dest = *out_string;
-	strncpy(_Dest, in_string, 0x100);
-	_Dest[0xff] = NULL;
-	*((uint*)_Dest[0x430]) = param_2;
-	return;
-}
-
 void static CopyStringToPointerToString(char** out_string, const char* in_string)
 {
 	char* _Dest;
@@ -310,7 +290,7 @@ void static CopyStringToPointerToString(char** out_string, const char* in_string
 	return;
 }
 
-// I just checked, it's the same as Microsoft's tolower() except 'A' - 'a' is precalculated, happens to be the space character.
+// It's the same as Microsoft's tolower() except 'A' - 'a' is precalculated, happens to be the space character.
 char Char_ToLowercase(char theChar)
 {
 	if (theChar > 64 && theChar < 91)
@@ -326,7 +306,7 @@ void AddStringToList(int index, const char* newString)
 }
 
 // Apparently these aren't strings, but they are treated like them.
-// Sweeps through as if it's a string, but when it does the comparison it casts both of them to integers with no conversion, so it'll compare 4 characters each time.
+// Sweeps through as if it's a string, but when it does the comparison it casts both of them to integer pointers, so it'll compare 4 characters each time.
 bool String_CompareAsIntegers(int* ints1, int* ints2)
 {
 	bool equal = true;
@@ -366,7 +346,6 @@ bool StringToNum(char* stringFloat, float* outFloat)
 			nullTerminated = true;
 		else
 		{
-			// Sweeps through the string until a non-white-space character
 			while (isspace(*EndPtr))
 				EndPtr++;
 
@@ -377,6 +356,91 @@ bool StringToNum(char* stringFloat, float* outFloat)
 	return nullTerminated;
 }
 
+static char* String_IndexOfAlmost(char* string, char theChar)
+{
+	// This function has 3 stages:
+	// The first stage is a strange indexOf where it only checks a few characters based on the location of the string in memory.
+	// The second stage makes no sense to me, it's both heavily obfuscated and probably needs more context.
+	// The third stage is a standard indexOf, but it only checks 4 characters
+	DWORD parityish = (DWORD)string & 3;
+	while (parityish != 0)
+	{
+		if (*string == theChar)
+			return string;
+
+		if (*string == NULL)
+			return NULL;
+
+		string++;
+		parityish = (DWORD)string & 3;
+	}
+
+
+	uint uVar1, uVar3, uVar4;
+	char* pcVar5;
+	char tempChar;
+	while (true)
+	{
+		while (true)
+		{
+			// What is even going on in this first loop
+			uVar1 = *(uint*)string;
+			// Checks if the string has 4 of theChar in a row
+			uVar4 = uVar1 ^ (theChar << 24 | theChar << 16 | theChar << 8 | theChar);
+
+			// (x XOR y XOR x) gives you y. This could have just been 0x7EFEFEFE
+			//uVar3 = uVar1 ^ ((uint)-1) ^ uVar1 + 0x7EFEFEFF;
+			uVar3 = 0x7EFEFEFE;
+
+			pcVar5 = string + 4;
+
+			// Same thing here, it's just 0x7EFEFEFE again
+			//if ((uVar4 ^ ((uint)-1) ^ uVar4 + 0x7EFEFEFF) & 0x81010100) break;
+			// Considering that was the only break, is it possible to reach the third stage?
+			if (false) break;
+
+			string = pcVar5;
+			if (uVar3 & 0x81010100)
+			{
+				if (uVar3 & 0x1010100)
+					return NULL;
+
+				if (uVar1 + 0x7EFEFEFF & 0x80000000)
+					return NULL;
+			}	
+		}
+
+		// Changed this to a loop
+		for (uVar1 = 0; uVar1 < 4; uVar1++)
+		{
+			if (string[uVar1] == theChar)
+				return string + uVar1;
+
+			if (string[uVar1] == NULL)
+				return NULL;
+		}
+
+		string = pcVar5;
+	}
+
+	// Considering the outer while loop doesn't have any breaks, I don't think it's possible to reach here.
+	return NULL;
+}
+
+int WString_GetLength(const wchar_t* in_wstring)
+{
+	wchar_t c;
+	wchar_t* tempstring = (wchar_t*)in_wstring;
+
+	do
+	{
+		c = *tempstring;
+		tempstring += 2;
+	} while (c != NULL);
+
+	return ((tempstring - in_wstring) >> 1) - 1;
+}
+
 
 
 
@@ -385,7 +449,6 @@ bool StringToNum(char* stringFloat, float* outFloat)
 // Debug
 // 
 /////////////////////////////////////////////////
-
 
 
 void CreateErrorMessageAndDie(const char* message, ...)
@@ -407,7 +470,7 @@ void CreateErrorMessageAndDie(const char* message, ...)
 
 void (*FUNC_006a2c28)();
 
-// My guess is, this is where bugbear's debugger would take over for investigation.
+// My guess is, this is where bugbear's bug-tearing debugger would take over.
 void ExitWithCode25()
 {
 	if (FUNC_006a2c28 != NULL)
@@ -421,11 +484,16 @@ void ExitWithCode25()
 	//_amsg_exit(25);
 }
 
+void DoNothing()
+{
+	return;
+}
+
 // The normal jumptable
 // In FO2 Ghidra did not find a name for it,
 // but in FOUC it's apparently a LiteDb void function table.
-// LiteDb is a database library which makes sense, but the oldest mention of LiteDb I can find is from 2014, and the oldest release I can find is from 2015.
-// Were they using LiteDb back in 2003? Did they go back and upgrade it to LiteDb in 2009? Or was it just a false positive on Ghidra's part?
+// The oldest mention of LiteDb I can find is from 2014, and the oldest release I can find is from 2015.
+// Was it just a false positive on Ghidra's part?
 void (*LiteDb_vftable_0067b1c0[])() = {
 	//FUN_00558390
 	//AutoClass9::AddMappedTable,
@@ -436,40 +504,55 @@ void (*LiteDb_vftable_0067b1c0[])() = {
 
 // The no jumptable
 void (*NOJMPTABLE_0067ad08[58])() = {};
+void* DoNotCallEverExceptItsNotBlockedOff(void* jmpTable, int bFree);
 
 // Instead of writing all that out I'll replace it with code that would do the same thing
-// 56 of them are ExitWithCode25, and the last one is FUN_0054c970, I don't know about that one yet.
+// 56 of them are ExitWithCode25, and the last one is a duplicate of DoNotCallEver except without the error message
 void CreateThatWeirdJumpTable()
 {
 	for (int i = 0; i < 57; i++)
 		NOJMPTABLE_0067ad08[i] = ExitWithCode25;
 
-	//NOJMPTABLE_0067ad08[57] = FUN_0054c970;
+	NOJMPTABLE_0067ad08[57] = (void (*)())DoNotCallEverExceptItsNotBlockedOff;
 }
 
-// FO1 does not have this function, either because it doesn't exist or it's not blocked off.
-// Wreckfest does not appear to have this function, although there is something similar, immediately crashes with "Not implemented"
-void* DoNotCallEver(void* jmpTable, int bFree)
+// So it turns out that DoNotCallEver has a duplicate that doesn't create the error message, so what is the first one?
+void* DoNotCallEverExceptItsNotBlockedOff(void* jmpTable, int bFree)
+{
+	jmpTable = &NOJMPTABLE_0067ad08;
+	if (bFree & 1)
+		free(jmpTable);
+	
+	return jmpTable;
+}
+
+
+// The "Must not be called - ever" error message can be triggered in fo2, fouc, and even ridge racer unbounded. The locations in memory are different for each game though.
+// FO2: Change 0x0067ADFC to 0x00558350 and it should crash immediately in-game or when loading into the menus
+// FOUC: Change 0x006F3DD0 to 0x005B2FB0 while the intro is playing and it'll crash on the title card
+// RR: Change 0x00C8C428 to  0x006E2CE0 while the intro is playing and it'll crash before the title is shown.
+
+// This function is under AutoClass8, it doesn't show up in Ghidra's Functions tree for some reason.
+void* DoNotCallEver(void** self, int bFree)
 {
 	// Seems like a default value maybe.
-	jmpTable = &LiteDb_vftable_0067b1c0;
+	self->vtable_0x0 = &LiteDb_vftable_0067b1c0;
 	CreateErrorMessageAndDie("Must not be called - ever.");
 
-	// If you bypassed the error message in FO2, this jump table would be replaced with one where every function will exit with code 25.
-	// I checked, and bypassing the error message just silently crashes anyways.
-	jmpTable = &NOJMPTABLE_0067ad08;
-	if (bFree)
-		free(jmpTable);
+	// If you bypassed the error message in FO2, this jump table would be replaced with one where every function except for one will exit with code 25
+	// I checked, and bypassing the error message just silently crashes anyways
+	self->vtable_0x0 = &NOJMPTABLE_0067ad08;
+	if (bFree & 1)
+		free(self);
 
-	return jmpTable;
-
+	return self;
 }
 
 
 
 /////////////////////////////////////////////////
 // 
-// LuaTable
+// Lua
 //
 /////////////////////////////////////////////////
 
@@ -480,43 +563,45 @@ void* DoNotCallEver(void* jmpTable, int bFree)
 
 uint LuaTable::AttemptToYield(int index)
 {
-		if (this->bDebug_0x34)
-			//this->LuaLogMaybe("attempt to yield across metamethod/C-call boundary");
-			DoNothing();
+	if (this->bDebug_0x34)
+		//this->LuaLogMaybe("attempt to yield across metamethod/C-call boundary");
+		DoNothing();
 
-		this->table_0xc = this->next_0x8 + (index * -2);
-		this->field7_0x6 = 1;
+	this->table_0xc = this->next_0x8 + (index * -2);
+	this->field7_0x6 = 1;
 }
 
 void LuaTable::Lua_AddNilProperty()
 {
 	// No bounds checking, If there's a way to access this function from lua it would be interesting to see what happens if this is spammed.
+
+	// Data is just left as is, could be anything.
 	this->next_0x8->type = LT::nil;
-	// For some reason I thought the 2 meant 2 pointers length, but now I don't understand what it means.
-	// This would overwrite memory it's already written when repeated, it clears 4 bytes while only advancing 2 bytes.
-	this->next_0x8 += 2;
+	// Turns out adding by 2 was ghidra's mistake, and my first assumption was right. Looking at the machine code it clearly adds 8 but the p-code view showed it as 2 pointers without mentioning it.
+	this->next_0x8 += size_of(LuaItem);
 }
 
-void LuaTable::Lua_ActuallyAddStringProperty(char* data, size_t dataLength)
+// Everything I've seen so far suggests that this function only takes standard strings as input, but sometimes it's given a wide string and I can't figure out how that doesn't break things.
+void LuaTable::Lua_ActuallyAddStringProperty(const char* in_string, size_t length)
 {
 	// Some kind of bounds checking I assume
 	/*
 	if (this->field10_0x10[0x10] <= this->field10_0x10[0x11])
 	{
-		FUN_005ba3a0(this);
+		this->FUN_005ba3a0();
 	}
 	*/
 
 	LuaItem* pNext = this->next_0x8;
 
 	// It's quite the rabbit hole of a function, still figuring it out.
-	//pNext->data = FUN_005c07b0(this, data, dataLength);
+	//pNext->data = this->Lua_NewStringStructMaybe(in_string, length);
 
 	pNext->type = LT::string;
-	this->next_0x8 += 2;
+	this->next_0x8 += size_of(LuaItem);
 }
 
-void LuaTable::Lua_AddStringProperty(char* in_string)
+void LuaTable::Lua_AddStringProperty(const char* in_string)
 {
 	if (in_string == NULL)
 		this->Lua_AddNilProperty();
@@ -526,21 +611,60 @@ void LuaTable::Lua_AddStringProperty(char* in_string)
 	return;
 }
 
+void LuaTable::Lua_AddStringProperty2(char* in_string)
+{
+	LuaItem* pItem = this->next_0x8;
+
+	//pItem->data = this->Lua_NewStringStructMaybe(in_string, String_GetLength(in_string));
+	pItem->type = LT::string;
+
+	//if ((this->field16_0x1c - this->next_0x8) < 9)
+		//this->FUN_005b8790(1);
+
+	this->next_0x8 += size_of(LuaItem);
+}
+
 void LuaTable::Lua_AddBoolProperty(bool in_bool)
 {
 	LuaItem* pNext = this->next_0x8;
 	pNext->data = (void*)in_bool;
 	pNext->type = LT::boolean;
-	this->next_0x8 += 2;
+	this->next_0x8 += size_of(LuaItem);
 }
 
-// Seems like astruct_114 has several different tables, or maybe it's like one big table that has temporary pointers
+void LuaTable::Lua_AddUserDataProperty(void* userdata)
+{
+	LuaItem* pNext = this->next_0x8;
+	pNext->data = userdata;
+	pNext->type = LT::userdata;
+	this->next_0x8 += size_of(LuaItem);
+}
+
+void LuaTable::Lua_AddNumberPropertyFromInt(int in_number)
+{
+	LuaItem* pNext = this->next_0x8;
+	float converted = (float)in_number;
+	pNext->data = *(void**)&converted;
+	pNext->type = LT::number;
+	this->next_0x8 += size_of(LuaItem);
+}
+
+void LuaTable::Lua_AddNumberPropertyFromFloat(float in_number)
+{
+	LuaItem* pNext = this->next_0x8;
+	pNext->data = *(void**)&in_number;
+	pNext->type = LT::number;
+	this->next_0x8 += size_of(LuaItem);
+}
+
+// Seems like the LuaTable has several different tables, or maybe it's like one big table that has temporary pointers
 // If the index is equal to or greater than 1:
 //		The 1-based index into table_0xc
 // If index is less than 1, it's compared to specific values to determine the list to return. These numbers seem arbitrary and I wonder if part of the number is a flag.
-//		-0x2712 : field56_0x44
-//		-0x2711 :  some math involving field11_0x14
-//		-0x2710 : table_0x10 + 0x17
+//		-1002 : field56_0x44
+//		-1001 :  some math involving field11_0x14
+//		-1000 : table_0x10 + 0x17
+// -1000 is the registry apparently, I don't know if that's related to the windows registry at all.
 
 LuaItem* LuaTable::Lua_GetItem(int index)
 {
@@ -589,7 +713,7 @@ LuaItem* LuaTable::Lua_GetItem(int index)
 	return output;
 }
 
-// Returns the type of the item at index
+
 int LuaTable::Lua_GetItemType(int index)
 {
 	LuaItem* pItem = this->Lua_GetItem(index);
@@ -598,6 +722,51 @@ int LuaTable::Lua_GetItemType(int index)
 		return (int)-1;
 
 	return pItem->type;
+}
+
+
+void LuaTable::Lua_RemoveItem(int index)
+{
+	LuaItem* tempItem;
+	LuaItem* pItem = this->Lua_GetItem(index);
+
+	while ((tempItem = pItem + size_of(LuaItem), tempItem < this->next_0x8))
+	{
+		pItem->data = tempItem->data;
+		pItem->type = tempItem->type;
+		pItem = tempItem;
+	}
+
+	this->next_0x8 -= size_of(LuaItem);
+}
+
+// Duplicates the last item in the table, inserting it at index.
+void LuaTable::Lua_InsertLastItem(int index)
+{
+	LuaItem* firstItem = this->Lua_GetItem(index);
+
+	for (LuaItem* i = this->next_0x8; i > firstItem; i -= size_of(LuaItem))
+	{
+		i->data = i[-1].data;
+		i->type = i[-1].type;
+	}
+
+	LuaItem* pNext = this->next_0x8;
+	firstItem->data = pNext->data;
+	firstItem->type = pNext->type;
+}
+
+
+void LuaTable::Lua_DuplicateItem(int index)
+{
+	// 2 more local variables are declared, but never used.
+	LuaItem* pItem = this->Lua_GetItem(index);
+	LuaItem* pNext = this->next_0x8;
+
+	pNext->data = pItem->data;
+	pNext->type = pItem->type;
+
+	this->next_0x8 += 8;
 }
 
 bool LuaTable::Lua_StringFromNumber(LuaItem* pItem)
@@ -616,6 +785,19 @@ bool LuaTable::Lua_StringFromNumber(LuaItem* pItem)
 	}
 	
 	return false;
+}
+
+void LuaTable::Lua_SeekNextPtr(int newIndex)
+{
+	if (newIndex < 0)
+		this->next_0x8 += (newIndex * 8) + 8;
+	else
+	{
+		while (this->next_0x8 < (this->table_0xc + (newIndex * 8)))
+			this->Lua_AddNilProperty();
+
+		this->next_0x8 = this->table_0xc + (newIndex * 8);;
+	}
 }
 
 bool LuaTable::Lua_IsNumber(int index)
@@ -641,11 +823,11 @@ LuaItem* LuaTable::Lua_NumberFromString(LuaItem* pStringItem, LuaItem* pNewNumbe
 {
 	if (pStringItem->type != LT::number)
 	{
-		float local_8;
-		// So endPtr_0x10 is not a pointer to the string, it is the string.
-		if (pStringItem->type == LT::string && StringToNum((char*)&((LuaString*)pStringItem->data)->endPtr_0x10, &local_8))
+		float converted;
+		if (pStringItem->type == LT::string && StringToNum((wchar_t*)&((LuaString*)pStringItem->data)->theString_0x10, &converted))
 		{
-			pNewNumberItem->data = local_8;
+			// floats are the same size as a void*, but you can't just (void*)
+			pNewNumberItem->data = *(void**)&converted;
 			pNewNumberItem->type = LT::number;
 			pStringItem = pNewNumberItem;
 		}
@@ -655,15 +837,61 @@ LuaItem* LuaTable::Lua_NumberFromString(LuaItem* pStringItem, LuaItem* pNewNumbe
 	return pStringItem;
 }
 
-float LuaTable::Lua_GetNumber(int index)
+LuaItem* NumberFromString2(LuaItem* pItem1, LuaItem* pItem2)
+{
+	if (pItem1->type != LT::number)
+	{
+		if ((pItem1->type == LT::string) && StringToNum(((LuaString*)pItem1->data)->theString_0x10, &local_8))
+	}
+}
+
+float LuaTable::Lua_GetNumberAsFloat(int index)
 {
 	LuaItem* pItem = this->Lua_GetItem(index);
 	LuaItem tempItem;
+
 	if (pItem->type != LT::number && (pItem = Lua_NumberFromString(pItem, &tempItem), pItem == NULL))
-	{
 		return 0.f;
-	}
+
 	return *(float*)&pItem->data;
+}
+
+long LuaTable::Lua_GetNumberAsInt(int index)
+{
+	LuaItem* pItem = this->Lua_GetItem(index);
+	if (pItem->type != LT::number && (pItem = Lua_NumberFromString(pItem, &tempItem), pItem == NULL))
+		return 0;
+
+	return (long)*(float*)&pItem->data;
+}
+
+LuaItem* LuaTable::Lua_GetNumberItem(int index)
+{
+	LuaItem tempItem;
+	LuaItem* pItem = this->Lua_GetItem(index);
+	if (pItem->type != LT::number)
+		pItem = NumberFromString2(pItem, &tempItem);
+
+	return pItem;
+}
+
+BOOL LuaTable::Lua_IsNumber_s(int index, LuaTable* otherTable)
+{
+	float extraout_ST0;
+
+	LuaItem* pItem = this->Lua_GetNumberItem(index);
+	float fVar1 = extraout_ST0;
+
+	BOOL whateverThisIs = ((fVar1 < 0.0) << 8 | (isnan(fVar1) << 10) | ((fVar1 == 0.0) << 0xE));
+
+	BOOL isNumber = (((BOOL)pItem & 0xFFFF0000) | whateverThisIs);
+	if (isnan(fVar1) != (fVar1 == 0.0))
+	{
+		isNumber = this->Lua_IsNumber(index);
+		if (isNumber == 0)
+			this->Lua_ReportError(index, LT::number);
+	}
+	return isNumber;
 }
 
 
@@ -674,6 +902,21 @@ bool LuaTable::Lua_GetBool(int index)
 		return pItem->data != 0;
 
 	return pItem->type != LT::nil;
+}
+
+// New struct that I gotta figure out
+void* LuaTable::Lua_GetThread(int index)
+{
+	void* result;
+
+	LuaItem* pItem = this->Lua_GetItem(index);
+
+	if (pItem->type == LT::thread)
+		result = pItem->data;
+	else
+		result = NULL;
+
+	return result;
 }
 
 
@@ -692,32 +935,42 @@ uint __fastcall Lua_GetVersion(LuaTable** table_EAX, int unaff_ESI)
 	type -= 0x7F;
 
 	// What
-	return (((intForm | 0xFF800000) << 8) >> (0x1F - (uchar)type & 0x1F) ^ intForm >> 31) - intForm >> 31 & ~(type >> 31);
+	//return (((intForm | 0xFF800000) << 8) >> (0x1F - (uchar)type & 0x1F) ^ intForm >> 31) - intForm >> 31 & ~(type >> 31);
 }
 
-int LuaTable::Lua_StringItemRelated(int index, undefined4* param_3)
+wchar_t* LuaTable::Lua_GetStringItem(int index, UINT* out_length)
 {
 	LuaItem* pItem = this->Lua_GetItem(index);
 	if (pItem->type != LT::string)
 	{
 		if (Lua_StringFromNumber(pItem) == 0)
 		{
-			if (param_3 != NULL)
-				*param_3 = NULL;
-
-			return 0;
+			if (out_length != NULL)
+				*out_length = 0;
+			return NULL;
 		}
 		//if (this->field10_0x10[0x10] <= this->field10_0x10[0x11])
 			//this->FUN_005ba3a0();
 		pItem = this->Lua_GetItem(index);
 	}
-	if (param_3 != NULL)
-		*param_3 = (uint)((LuaString*)(pItem->data))->startPtr_0xc;
+	if (out_length != NULL)
+		*out_length = (uint)((LuaString*)(pItem->data))->length_0xc;
 
-	return (int)&((LuaString*)(pItem->data))->endPtr_0x10;
+	return ((LuaString*)(pItem->data))->theString_0x10;
 }
 
-char* LuaTable::Lua_GetItemAsString(int index)
+wchar_t* LuaTable::Lua_GetStringItem_s(int index, UINT* out_length)
+{
+	wchar_t* text;
+	text = this->Lua_GetStringItem(index, out_length);
+	if (text == NULL)
+		this->Lua_ReportError(index, LT::string);
+
+	return text;
+
+}
+
+char* LuaTable::Lua_GetItemStringLength(int index)
 {
 	char* result;
 	LuaItem* pItem = this->Lua_GetItem(index);
@@ -728,26 +981,68 @@ char* LuaTable::Lua_GetItemAsString(int index)
 		if (Lua_StringFromNumber(pItem) == 0)
 			result = NULL;
 		else
-			result = ((LuaString*)(pItem->data))->startPtr_0xc;
+			result = ((LuaString*)(pItem->data))->length_0xc;
 		break;
 
 	case LT::string:
-		result = ((LuaString*)(pItem->data))->startPtr_0xc;
+		result = ((LuaString*)(pItem->data))->length_0xc;
 		break;
 
 	case LT::table:
 		//result = FUN_005c0510(pItem->data);
 		break;
 
-	default:
-		result = NULL;
+	// I thought being put after default means it couldn't be reached but it turns out it can
+	// I'll move it above default to make things less confusing.
+	case LT::userdata_s:
+		result = ((LuaUserDataS*)pItem->data)->length_0x10;
 		break;
 
-	case LT::userdata_s:
-		// It's been put after default so it's not possible to reach here.
-		result = ((LuaUserData*)pItem->data)->string_0x10;
+	default:
+		result = NULL;
 	}
 	return result;
+}
+
+int LuaTable::Lua_Printf(char* format, ...)
+{
+	va_list list;
+	va_start(list, format);
+
+	uint local_8 = 1;
+	//this->Lua_AddStringProperty2("");
+
+	char* puVar1;
+	LuaItem* pNext;
+	int local_3c;
+	void* puVar2;
+
+	while (puVar1 = String_IndexOfAlmost(format, '%'), puVar1 != NULL)
+	{
+		pNext = this->next_0x8;
+		local_3c = puVar1 - format;
+		puVar2 = this->Lua_NewStringStructMaybe(format, local_3c);
+		pNext->data = puVar2;
+		pNext->type = LT::string;
+		if (this->endOfTable_0x1c - (int)this->next_0x8 < 9)
+		{
+			local_3c = 1;
+			//this->FUN_005b8790(1);
+		}
+		this->next_0x8 += 8;
+		switch (puVar1[1])
+		{
+		case '%':
+			local_3c = "%";
+			this->Lua_AddStringProperty2("%");
+			break;
+
+		default:
+			this->Lua_AddStringProperty2(&local_3c);
+			break;
+		}
+
+	}
 }
 
 // Returns the name of a type
@@ -761,14 +1056,16 @@ const char* LuaTable::Lua_StringTypeFromInt(int type)
 
 struct LuaUserDataS
 {
-	// 8 undefined bytes at offset 0x0, probably a vftable
+	// 8 undefined bytes at offset 0x0
 	LuaUserData* userdata_0x8;
+	// 4 undefined bytes at offset 0xC
+	int length_0x10;
 };
 
 // I'm not sure if the userdata uses the same struct as the strings
-LuaUserData* LuaTable::Lua_GetUserdata(int param_2)
+LuaUserData* LuaTable::Lua_GetUserdata(int index)
 {
-	LuaItem* pItem = this->Lua_GetItem(param_2);
+	LuaItem* pItem = this->Lua_GetItem(index);
 
 	if (pItem->type == LT::userdata)
 		return (LuaUserData*)pItem->data;
@@ -781,17 +1078,15 @@ LuaUserData* LuaTable::Lua_GetUserdata(int param_2)
 		return NULL;
 }
 
-// Pads the table if the newLength is greater than length
-// If the newLength is the same as the current length, this function will instead add 65535 nil items due to the pre-decrement
-void __fastcall Lua_PadTableIfNeeded(int newLength, LuaTable*** unaff_EDI)
+void __fastcall Lua_PadTableIfNeeded(int newLength_EAX, LuaTable** unaff_EDI)
 {
-	int length = (*unaff_EDI[1])->Lua_GetTableLength();
-	if (length < newLength)
+	int length = unaff_EDI[1]->Lua_GetTableLength();
+	if (length < newLength_EAX)
 	{
-		int i = newLength - length;
+		length = newLength_EAX - length;
 		do
-			(*unaff_EDI[1])->Lua_AddNilProperty();
-		while (--i);
+			unaff_EDI[1]->Lua_AddNilProperty();
+		while (--length);
 	}
 }
 
@@ -812,8 +1107,7 @@ bool LuaTable::Lua_ItemsEqual_s(int index1, int index2)
 		return Lua_ItemsEqual(pItem1, pItem2);
 }
 
-// This function does not do what I think it's supposed to, it raises an error when the given item is not the given type,
-// but ReportError() will discard expectedType and call GetItemType() again to report the error, which was just confirmed to be the wrong type.
+
 void LuaTable::Lua_ThrowIfIndexIsNotGivenType(int index, int expectedType)
 {
 	if (this->Lua_GetItemType(index) != expectedType)
@@ -822,14 +1116,16 @@ void LuaTable::Lua_ThrowIfIndexIsNotGivenType(int index, int expectedType)
 
 void LuaTable::Lua_ReportError(int index, int expectedType)
 {
-	this->Lua_ReportErrorForReal(index);
+	this->Lua_ReportErrorForReal(index, expectedType);
 }
 
-void LuaTable::Lua_ReportErrorForReal(int index)
+// Based on the log it looks like it actually does use the expectedType, but ghidra has no idea how it was passed in C.
+// I'll just add it to the parameters
+void LuaTable::Lua_ReportErrorForReal(int index, int expectedType)
 {
 	DWORD type = this->Lua_GetItemType(index);
 	this->Lua_StringTypeFromInt(type);
-	//this->Lua_AnotherLoggingFunction("%s expected, got %s");
+	//this->Lua_AnotherLoggingFunction("%s expected, got %s", expectedType, index);
 	//this->Lua_ErrorHandling();
 }
 
@@ -841,13 +1137,13 @@ uint LuaTable::Lua_KickPlayer()
 
 	LuaUserData* pUserData = (LuaUserData*)this->Lua_GetUserdata(1);
 	if (pUserData == NULL)
-		this->Lua_ReportErrorForReal(1);
+		this->Lua_ReportErrorForReal(1, LT::userdata_s);
 
 	// Function pointers have nothing on function pointers inside function pointers
 	void (**vftable1)(void(***)()) = pUserData->vftable;
 
+	// This one is not checked to see if it's null
 	pUserData = (LuaUserData*)this->Lua_GetUserdata(2);
-	// To avoid a paradoxical declaration, the second vftable will have to be a different type at first
 	void (**vftable2)() = (void (**)())pUserData->vftable;
 
 	undefined4 local_4 = pUserData->unkn_0x4;
@@ -861,13 +1157,177 @@ void LuaTable::StructThing(astruct_169* tableStruct)
 	tableStruct->table_0x8 = this;
 }
 
+// Until I confirm that this item is the same as LuaTable, I'm creating a new struct
+struct TableItem
+{
+	// 7 undefined bytes at offset 0x0
+	BYTE byte_0x7;
+	TableItemStructThing* struct_0x8;
+	int unkn_0x10;
+};
+
+struct LinkedTableItem
+{
+	// 8 undefined bytes at offset 0x0
+	LuaItem item_0x8;
+	LinkedTableItem* next_0x10;
+};
+
+
+#define SafeEquals(a, b) ( (isnan(a) || isnan(b)) != (a == b) )
+
+LuaItem* FUN_005bfe40(TableItem* tableItem, LuaItem* pItem)
+{
+	LuaItem* newItem;
+	int itemType = pItem->type;
+	if (itemType != LT::nil)
+	{
+		if (itemType == LT::number)
+		{
+			// Converts from float to long to int to float, effectively rounding it.
+			ulonglong asLong = (ulonglong)*(float*)&pItem->data;
+			float rounded = (float)(int)asLong;
+
+			if (SafeEquals(*(float*)&pItem->data, rounded))
+				return Lua_GetItemFromTableItem(tableItem, asLong);
+
+		}
+		else if (itemType == LT::string)
+			return FUN_005bfde0(tableItem, pItem->data);
+
+		LinkedTableItem local_10 = Lua_GetLinkedList(tableItem, pItem);
+		// Traversing a linked list to find an equal item
+		do
+		{
+			if (Lua_ItemsEqual(local_10->pitem_0x8, pItem))
+				return local_10;
+
+			local_10 = local_10->linkedItem_0x10;
+		} while (local_10 != NULL);
+	}
+	return &LuaItem_None_0065271c;
+}
+
+struct TableItemStructThing
+{
+	// 6 undefined bytes at offset 0x0
+	BYTE byte_0x6;
+};
+
+void LuaTable::Lua_Add3ItemsAndCopy1(LuaItem* out_pItem1, LuaItem* pItem1, LuaItem* pItem2, LuaItem* pItem3)
+{
+	// I think this function is quite obfuscated, there was a lot of random math that didn't do anything and I ended up just removing it.
+	LuaItem* pNext = this->next_0x8;
+	pNext->data = pItem1->data;
+	pNext->type = pItem1->type;
+
+	//pNext = this->next_0x8;
+	pNext[1].data = pItem2->data;
+	pNext[1].type = pItem2->type;
+
+	//pNext = this->next_0x8;
+	pNext[2].data = pItem3->data;
+	pNext[2].type = pItem3->type;
+
+	//if (this->endOfTable_0x1c - this->next_0x8 < 25)
+		//this->FUN_005b8790(3);
+
+	
+	this->next_0x8 += sizeof(LuaItem) * 3;
+	//this->FUN_005b90c0(this->next_0x8 - (sizeof(LuaItem) * 3), 1);
+	this->next_0x8 -= size_of(LuaItem);
+	LuaItem* pNext = this->next_0x8;
+	out_pItem1->data = pNext->data;
+	out_pItem1->type = pNext->type;
+}
+
+LuaItem* LuaTable::FUN_005bc190(LuaItem* pItem, int param_3)
+{
+	LuaItem* result, local_8;
+
+	if (pItem->type == LT::table)
+		local_8 = pItem->data->uint_0x8;
+	else if (pItem->type == LT::userdata_s)
+		local_8 = pItem->data->uint_0x8;
+	else
+		result = this->field10_0x10[pItem->type + 0x1F];
+
+	if (local_8 == NULL)
+		result = &LuaItem_None_0065271c;
+	else
+		result = FUN_005bfde0(local_8, this->field10_0x10[param_3 + 0x28]);
+
+	return result;
+}
+
+// Based on what I've decompiled so far, it replaces it's own table with the table of an item.
+void LuaTable::Lua_gettable(LuaItem* pItem, LuaItem* pLastItem1, LuaItem* pNewItem)
+{
+	LuaItem* tempItem1;
+	LuaItem* tempItem2;
+	LuaItem* replacementItem;
+
+	// Ghidra says it was originally a do while, but it's exactly like a for so why not
+	for (uint i = 0; true; i++)
+	{
+		if (i > 99)
+		{
+			//this->LuaLogMaybe("loop in gettable");
+			return;
+		}
+
+		if (pItem->type == LT::table)
+		{
+			TableItem* tableItem = (TableItem*)pItem->data;
+			LuaItem* anotherItem = tableItem->FUN_005bfe40(pLastItem1);
+			if (anotherItem->type != LT::nil)
+			{
+SaveNewItem:
+				pNewItem->data = anotherItem->data;
+				pNewItem->type = anotherItem->type;
+				return;
+			}
+
+			if (tableItem->struct_0x8 == NULL)
+				tempItem1 = NULL;
+			else
+			{
+				if (((tableItem->struct_0x8->byte_0x6) & 1) == 0)
+					tempItem2 = FUN_005bc140(tableItem->struct_0x8, NULL, this->field10_0x10[0x28]);
+				else
+					tempItem2 = NULL;
+
+				tempItem1 = tempItem2;
+			}
+			replacementItem = tempItem1;
+
+			if (tempItem1 == NULL)
+				goto SaveNewItem;
+		}
+		else
+		{
+			replacementItem = this->FUN_005bc190(pItem, 0);
+			if (replacementItem->type == LT::function)
+			{
+				this->Lua_Add3ItemsAndCopy1(pNewItem, replacementItem, pItem, pLastItem1);
+				return;
+			}
+		}
+		pItem = replacementItem;
+	}
+}
+
+void LuaTable::CopyItemFromTableItem(int tableIndex, int itemIndex)
+{
+	LuaItem* tableItem = this->Lua_GetItem(tableIndex);
+	LuaItem* itemItem = ()(tableItem->data)
+}
+
 // It's dividing by 8, makes sense now
 int LuaTable::Lua_GetTableLength()
 {
-	return this->next_0x8 - this->table_0xc >> 3;
+	return (this->next_0x8 - this->table_0xc) >> 3;
 }
-
-
 
 
 // It's another structish where I guess the second pointer is the index of a special item, which should be a function
@@ -909,6 +1369,7 @@ bool Lua_ItemsEqual(LuaItem* pItem1, LuaItem* pItem2)
 	return equal;
 }
 
+
 int LuaTable::JoinCurrentSession()
 {
 	if (this->Lua_GetItemType(1) != LT::nil)
@@ -918,41 +1379,169 @@ int LuaTable::JoinCurrentSession()
 
 int LuaTable::JoinSessionFromCommandLine()
 {
+	this->Lua_ThrowIfIndexIsNotGivenType(1, LT::userdata_s);
+	LuaUserData* pUserData = this->Lua_GetUserdata(1);
+	if (pUserData != NULL)
+		this->Lua_ReportErrorForReal(1);
+	// So: This indicates that the first item of the struct is a pointer to another struct, and the first item of that struct is a jmptable
+	(*((**pUserData)[4]))();
+	return 0;
 }
 
-char* String_IndexOf(char* string, char theChar)
+uint Lua_LongJump(LuaTable* table, void (*func)(LuaTable*, undefined4*), undefined4* scriptObject)
 {
-	// Searches within a max of 2 characters depending on where the string is located in memory.
-	// address ends with 0 or C: does not search
-	// address ends with 4: searches 1 char
-	// address ends with 8: searches 2 chars
-	DWORD parityish = (DWORD)string & 3;
-	while (parityish != 0)
+	jmp_buf local_48;
+	uint local_4c = table[1].next_0x8;
+	table[1].next_0x8 = (LuaItem*)&local_4c;
+
+	// _setjmp3
+	// Internal CRT function. A new implementation of the setjmp function.
+	// Don't use this function in a C++ program. It's an intrinsic function that doesn't support C++.
+	// - Documentation
+	// I guess it's proof this wasn't written in C++
+	int iVar1 = _setjmp3(&local_48, 0, local_4c, local_48);
+	if (iVar1 == 0)
+		(*func)(table, scriptObject);
+
+	table[1].next_0x8 = (LuaItem*)local_4c;
+
+	return 0;
+}
+
+void Lua_ReturnFromLongJump(uint* param_2)
+{
+
+}
+
+// Functions that I imagine are called from Lua, given the strange procedure
+// The first item in the table is used as the input to functions, while outputs to functions are added to the end of the table, almost like it's a print output or something.
+
+LuaErrorCode len(LuaTable* table)
+{
+	UINT length;
+	table->Lua_GetStringItem_s(1, &length);
+	table->Lua_AddNumberPropertyFromInt(length);
+	return BB_OK;
+}
+
+LuaErrorCode GetNumWStringLines(LuaTable* table)
+{
+	LuaTable* tableCopy = table;
+	wchar_t* in_wstring = table->Lua_GetStringItem(1, NULL);
+
+	LuaTable* pLVar2 = (LuaTable*)1;
+	table = (LuaTable*)1;
+	uint length = WString_GetLength(in_wstring);
+	if (length)
 	{
-		if (*string == theChar)
-			return string;
-
-		if (*string == NULL)
-			return NULL;
-
-		string++;
-		parityish = (DWORD)string & 3;
-	}
-	// That's the indexOf part, I don't know what the rest of this function is for though.
-
-	uint uVar1;
-	while (true)
-	{
-		while (true)
+		// It was originally a do while but it's structured exactly like a for so why not
+		for (int i = 0; i < length; i++)
 		{
-			uVar1 = *(uint*)string;
-			uint uVar4 = uVar1 ^ (theChar << 24 | theChar << 16 | theChar << 8 | theChar);
-			uint uVar3 = uVar1 ^ ((uint)-1) ^ uVar1 + 0x7EFEFEFF;
+			if (in_wstring[i] == L'\n')
+				pLVar2++;
+
+			table = pLVar2;
+		}
+	}
+	tableCopy->Lua_AddNumberPropertyFromFloat((float)(int)table);
+	return BB_OK;
+}
+
+LuaErrorCode ConvertToWString(LuaTable* table)
+{
+
+	if (!table->Lua_IsItemAStringOrNumber(1))
+	{
+		table->Lua_ActuallyAddStringProperty(L"NIL STRING", WString_GetLength(L"NIL STRING") + 2);
+	}
+	else
+	{
+		wchar_t* pWVar2 = table->Lua_GetStringItem(1, NULL);
+		wchar_t* iVar3 = pWVar2 + 1;
+		do
+		{
 
 		}
 	}
-		
 }
+
+LuaErrorCode getplatform(LuaTable* table)
+{
+	table->Lua_ActuallyAddStringProperty("PC", 2);
+
+	return BB_OK;
+}
+
+LuaErrorCode StartKickVote(LuaTable* table)
+{
+	table->Lua_ThrowIfIndexIsNotGivenType(1, LT::userdata_s);
+	LuaUserData* pUserData = table->Lua_GetUserdata(1);
+	if (pUserData == NULL)
+		table->Lua_ReportErrorForReal(1, LT::userdata_s);
+
+	int* piVar1 = *(int**)(pUserData->vftable);
+	pUserData = table->Lua_GetUserdata(2);
+	int local_8 = *(int*)pUserData->vftable;
+
+	FUN_004f0f20(piVar1, &local_8);
+
+	return BB_OK;
+}
+
+LuaErrorCode deg(LuaTable* table)
+{
+	LuaTable* unaff_ESI;
+	table->Lua_GetNumber_s(1, unaff_ESI);
+}
+
+// FormatMemoryCard will call this function, but given the lack of formatting going on I'd say that's probably unintentional.
+void FormatMemoryCardForRealMaybe(int param_1)
+{
+	return param_1->unkn_0x4;
+}
+
+// Left-over from the PS2 version, it still calls a function but clearly it doesn't do any formatting anymore.
+LuaErrorCode FormatMemoryCard()
+{
+	bbSaveDevice* save = SaveDeviceRelated_008e8410;
+	FormatMemoryCardForRealMaybe();
+	save->field1088_0x44c = 7;
+	return BB_OK;
+}
+
+BYTE byteArray_00652728[256] =
+{
+	0, 1, 2, 2, 3, 3, 3, 3, 4, 4, 4, 4, 4, 4, 4, 4, 5, //...
+};
+
+// Instead of writing all that out, I'm going to replace it with code that would do the same thing
+// Each item is duplicated by a factor of 2, so it only goes to 8
+void CreateThatByteArray()
+{
+	byteArray_00652728[0] = 0;
+	int num, innerLoops, index;
+	num = innerLoops = index = 1;
+	while (index < 256)
+	{
+		for (int j = 0; j < innerLoops; j++)
+			byteArray_00652728[index + j] = num;
+
+		index += innerLoops;
+		num++;
+		innerLoops *= 2;
+	}
+}
+
+
+int FUN_005bb8a0(uint indexKinda)
+{
+	uint i = -1;
+	for (; indexKinda > 255; indexKinda >>= 8)
+		i += 8;
+
+	return (uint)byteArray_00652728[indexKinda] + i;
+}
+
 
 
 /////////////////////////////////////////////////
@@ -1007,12 +1596,13 @@ void FileObject::FileObject_SetFilePointer(int newLoc)
 }
 
 // FileObject_New() is a more complicated version of FileObject_Create()
-FileObject* FileObject::FileObject_New(uint unaff_EBX, const char* filename_unaff_EDI)
+FileObject* __fastcall FileObject_New(const char* filename_unaff_EDI, uint flags_unaff_EBX)
 {
 	FileObject* output = NULL;
-	if ((unaff_EBX & 1) == 0)
+	// Checking if it's reading an existing file or not
+	if ((flags_unaff_EBX & 1) == 0)
 	{
-		FileObject* piVar2 = (FileObject*)malloc(0x4024);
+		FileObject* piVar2 = (FileObject*)malloc(sizeof(FileObject));
 		if (piVar2 != NULL)
 		{
 			piVar2->filePos = NULL;
@@ -1024,22 +1614,23 @@ FileObject* FileObject::FileObject_New(uint unaff_EBX, const char* filename_unaf
 			piVar2->usuallyNeg1 = -1;
 			output = piVar2;
 		}
-		// It's outside the if statement, which will try to access output even when it's un-initialized.
-		//output->FileObject_Create();
+		// It's outside the if statement, which will try to access output even when it's NULL.
+		output->FileObject_Create(filename_unaff_EDI, flags_unaff_EBX);
 	}
 	else
 	{
 		struct _stat result;
-		if (_stat(filename_unaff_EDI, &result) == 0)
+		int iVar1 = _stat(filename_unaff_EDI, &result);
+		if (iVar1 == 0)
 		{
-			FileObject* pAVar2 = (FileObject*)malloc(0x4024);
+			FileObject* pAVar2 = (FileObject*)malloc(sizeof(FileObject));
 			if (pAVar2 != NULL)
 			{
-				pAVar2->FileObject_Clear();
+				FileObject_ClearEAX(pAVar2);
 				output = pAVar2;
 			}
 			// They did it again
-			output->FileObject_Create();
+			output->FileObject_Create(filename_unaff_EDI, flags_unaff_EBX);
 			void* pvStack_18;
 			output->size = pvStack_18;
 			return output;
@@ -1078,33 +1669,31 @@ void FileObject::FileObject_Create(LPCSTR lpFilename, uint flags)
 
 // If mode is 1, It'll just set the file pos with no fuss.
 // If mode is 2, It'll treat the file pos relative to the end.
-// If mode is 0, checks a flag in the attributes and if it's set, read from the file in, a way.
+// If mode is 0, checks a flag in the attributes and if it's cleared, read from the file in, a way.
 void FileObject::FileObject_SetFilePos(int newPos, int mode)
 {
-	if (mode == 0)
+	switch (mode)
 	{
+
+	case 0:
 		if ((this->fileattributes & 0x100) == 0)
 		{
 			char* pcVar1 = this->filePos;
 			/*
-			for (int iVar2 = this->usuallyNeg1; iVar2 < (int)(pcVar1 + newPos) >> 0xE; iVar2++)
+			for (int iVar2 = this->usuallyNeg1; iVar2 < (int)(pcVar1 + newPos) >> 14; iVar2++)
 				if (iVar2 > -1)
 					this->FileObject_Read(iVar2);
 			*/
 		}
-	}
-	else
-	{
-		if (mode == 1)
-		{
-			this->filePos = (char*)newPos;
-			return;
-		}
-		if (mode == 2)
-		{
-			this->filePos = (char*)((int)this->size - newPos);
-			return;
-		}
+		break;
+
+	case 1:
+		this->filePos = (char*)newPos;
+		break;
+
+	case 2:
+		this->filePos = (char*)((int)this->size - newPos);
+
 	}
 	return;
 }
@@ -1120,6 +1709,7 @@ char* FileObject::FileObject_GetFilePosButLikeWhy()
 {
 	return this->filePos;
 }
+
 
 bool FileObject::FileObject_IsFilePosBeyond()
 {
@@ -1161,9 +1751,8 @@ FileObject* FileObject::FileObject_ResetMaybe(int bFree)
 		this->handle = NULL;
 	}
 	if (bFree & 1)
-	{
 		free(this);
-	}
+
 	return this;
 }
 
@@ -1193,7 +1782,6 @@ uint UINT_008da730;
 
 void OpenBFS(LPCSTR filename, YetAnotherFileObject* unaff_EDI)
 {
-	HANDLE pvVar3;
 	int aiStack_10[2];
 	int iVar2;
 	int iVar9;
@@ -1202,14 +1790,14 @@ void OpenBFS(LPCSTR filename, YetAnotherFileObject* unaff_EDI)
 	String_GetLength((char*)filename);
 
 	// Very large structure
-	unaff_EDI[0x88] = NULL;
+	//unaff_EDI[0x88] = NULL;
 
 	DWORD fileFlags = FILE_ATTRIBUTE_NORMAL;
 
 	if (UINT_008da730)
 		fileFlags |= FILE_FLAG_DELETE_ON_CLOSE;
 
-	// bfsFile seems to be an all-purpose variable, first it's the handle of the file, then it's used to contain the size of the file, then it's used to point at the file's data.
+	// bfsFile seems to be an all-purpose variable, first it's the handle of the file, then it's used to contain the size of the file, then it's used to point at the file's data, then it's used as a temporary int.
 	char* bfsFile = (char*)CreateFileA(filename, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, fileFlags, NULL);
 
 	unaff_EDI->handle_0x0 = bfsFile;
@@ -1235,7 +1823,7 @@ void OpenBFS(LPCSTR filename, YetAnotherFileObject* unaff_EDI)
 
 	// I don't know how, but it ends up with bfsFile pointing to the contents of the file
 	/*
-	unaff_EDI[0x84] = bfsFile;
+	unaff_EDI->unkn_0x210 = uStack_8 & 0x7FFFFFFFF;
 	uint uStack_8 = 0;
 	size_t _Size = (int)(HANDLE)(uStack_8 & 0x7FFFFFFF) + 3U & 0xFFFFFFFC;
 	HANDLE pvStack_4;
@@ -1254,7 +1842,8 @@ void OpenBFS(LPCSTR filename, YetAnotherFileObject* unaff_EDI)
 	if (ReadAsInt(bfsFile, 0x10) != 0x3E5)
 		CreateErrorMessageAndDie("BFS archive <%s> has invalid hash size (%d)");
 
-	unaff_EDI[0x86] = ReadAsString(bfsFile, 0x14);
+	// Only included in fo2a.bfs, b and c's is NULL
+	unaff_EDI->string_0x218 = ReadAsString(bfsFile, 0x14);
 
 	int* piVar10 = ReadAsIntP(bfsFile, 0x1F3C);
 	int* piVar7 = (int*)malloc(0x14);
@@ -1271,28 +1860,30 @@ void OpenBFS(LPCSTR filename, YetAnotherFileObject* unaff_EDI)
 		piVar7[4] = iVar2 + (int)piVar10;
 	}
 
-	pvVar3 = unaff_EDI[0x88];
-	unaff_EDI[0x87] = (char*)piVar7;
+	unaff_EDI->string_0x21c = (char*)piVar7;
+
 	bfsFile = (char*)((int)piVar10 + *piVar7);
-	unaff_EDI[0x83] = bfsFile;
-	if (pvVar3 != NULL)
+	unaff_EDI->string_0x20c = bfsFile;
+
+	int pvVar3 = unaff_EDI->int_0x220;
+	if (pvVar3 != 0)
 	{
-		for (char* pvVar10 = unaff_EDI[0x85]; pvVar10 != NULL; pvVar10--)
+		for (int i = unaff_EDI->int_0x214; i != 0; i--)
 		{
 			ReadAsInt(bfsFile, 4) += (int)pvVar3;
 
-			// The ghidra code uses a second comparison like a trick to set i during the if. I chose to do it afterwards, is it any different?
-			// && (i = 0, bfsFile[1] != NULL)
+			// The ghidra code uses a second comparison like a trick to set j during the if. I chose to do it afterwards, is it any different?
+			// && (j = 0, bfsFile[1] != NULL)
 			// If that's all it was for I can probably just remove it
 			if ((bfsFile[1] != NULL))
 			{
-				int i = 0;
+				int j = 0;
 				do
 				{
-					piVar7 = ReadAsIntP(bfsFile, i * 4 + 0x18);
+					piVar7 = ReadAsIntP(bfsFile, j * 4 + 0x18);
 					*piVar7 += (int)pvVar3;
-					i++;
-				} while (i < ReadAsByte(bfsFile, 1));
+					j++;
+				} while (j < ReadAsByte(bfsFile, 1));
 			}
 			bfsFile += ReadAsByte(bfsFile, 1) * 4 + 0x18;
 		}
@@ -1301,20 +1892,174 @@ void OpenBFS(LPCSTR filename, YetAnotherFileObject* unaff_EDI)
 }
 
 
+/////////////////////////////////////////////////
+//
+// Input
+// 
+/////////////////////////////////////////////////
 
-// MISC
+BYTE lpKeyState_008d7d60[0x40];
+BYTE lpKeyState_008d7e60[0x40];
+HHOOK HHOOK_008da738;
 
-// So far I've found 8 copies of this function in different spots, maybe they are different types of empty PROC functions?
-void DoNothing()
+
+
+LRESULT Keyboard_HookProc(int code, WPARAM wParam, LPARAM lParam);
+
+HOOKPROC nextHook = (HOOKPROC)Keyboard_HookProc;
+
+LRESULT KeyboardController::Keyboard_Hook(uint param_1)
 {
+	// Ghidra shows the STOSD.REP instruction as a for loop
+	__stosd(lpKeyState_008d7e60, 0, 0x40);
+	__stosd(lpKeyState_008d7d60, 0, 0x40);
+
+	if (HHOOK_008da738 == NULL)
+	{
+		DWORD dwThreadId = GetCurrentThreadId();
+		HHOOK_008da738 = SetWindowsHookExA(2, nextHook, NULL, dwThreadId);
+		if (HHOOK_008da738 == NULL)
+		{
+			//uStack_2c = 0xF;
+			//uStack_30 = 0;
+			//uStack_40 = 0;
+			//FUN_0055b050(auStack_44, "KeyboardController::Unable to hook keyboard", 0x2B);
+			//appuStack_28[0] = &PTR_FUN_006578c4;
+			//uStack_4 = 0xF;
+			//uStack_8 = 0;
+			//uStack_18 = 0;
+			//FUN_0055ae50(auStack_1c, auStack_44, 0, 0xFFFFFFFF);
+
+			// Some kind of exception code, I'll just do this for now.
+			throw EXCEPTION_INVALID_HANDLE;
+		}
+	}
+
+	DAT_008d7c44 = GetKeyboardLayout(0);
+
+	_stosd(UINT_008d7c48, 0, 0x40);
+	DAT_008d7d58 = 0;
+	DAT_008da740 = 0;
+	this->field_0x12c = 1;
+	this->field_0x130 = 1;
+	int iVar1 = FUN_00553220();
+	if (iVar1 == 0)
+	{
+		//this->vftable_0x0[17]();
+		FUN_00553360();
+	}
+	iVar1 = 0;
+	do
+	{
+		FUN_00553120();
+		iVar1++;
+	} while (iVar1 < 20);
+
+	return 1;
+}
+
+int DAT_008da740;
+uint DAT_008da734;
+int* PTR_008e844c;
+
+LRESULT Keyboard_HookProc(int code, WPARAM wParam, LPARAM lParam)
+{
+	if (code < 0)
+	{
+		CallNextHookEx(HHOOK_008da738, code, wParam, lParam);
+		return;
+	}
+
+	uint wVirtKey = wParam & 0xFF;
+	if (lParam < 0)
+	{
+		if (lpKeyState_008d7e60[wVirtKey] < 0)
+			DAT_008da740--;
+
+		lpKeyState_008d7e60[wVirtKey] &= 0x7F;
+	}
+	else
+	{
+		// In Binary: 0?00 0000 0000 0000 0000 0000 0000 0000
+		if (DAT_008da734 || ((lParam & 0x40000000U) == 0))
+		{
+			if (lpKeyState_008d7e60[wVirtKey] > -1)
+				DAT_008da740++;
+
+			lpKeyState_008d7e60[wVirtKey] ^= 1;
+			lpKeyState_008d7e60[wVirtKey] |= 0x80;
+
+			lpKeyState_008d7d60[wVirtKey] += 1;
+		}
+		if (PTR_008e844c[11] != 0)
+		{
+			if (((lParam & 0x40000000U) != 0) && (PTR_008e844c[5] == 0))
+			{
+				CallNextHookEx(HHOOK_008da738, code, wParam, lParam);
+				return;
+			}
+
+			WCHAR convertedKey = 0;
+			// local_4 is AND'd before it's even initialized.
+			uint local_4;
+			local_4 &= 0xFFFF0000;
+			int iVar1 = ToUnicode(wVirtKey, lParam, lpKeyState_008d7e60, &convertedKey, 8, 0);
+			if (iVar1 == 1)
+				// Treat local_4 as an array of 2 shorts, take the second one and concatentate with local_20.
+				local_4 = (((short*)&local_4)[1] << 16) | (short)convertedKey;
+
+			LPARAM LVar4;
+			uint uVar3;
+			iVar1 = ToAscii(wVirtKey, lParam, lpKeyState_008d7e60, (LPWORD)&convertedKey, 0);
+			if (iVar1 == -1)
+			{
+				uVar3 = convertedKey & 0xFFFF;
+				wVirtKey = 0;
+				LVar4 = 0;
+			}
+			else
+			{
+				if (iVar1 != 0)
+				{
+					if (iVar1 > 0)
+					{
+						int iVar2 = 0;
+						do
+						{
+							//FUN_00550350(&local_20 + (iVar2 * 2), wVirtKey, 0, local_4);
+							iVar2++;
+						} while (iVar2 < iVar1);
+					}
+					goto hookExit;
+				}
+				uVar3 = 0;
+				LVar4 = lParam;
+			}
+			//FUN_00550350(uVar3, wVirtKey, LVar4, local_4);
+		}
+	}
+hookExit:
+	CallNextHookEx(HHOOK_008da738, code, wParam, lParam);
 	return;
 }
 
-// Maybe this is an assembly function?
-void* Depointerize(void** pointer)
+// Another function that looks suspicously like DoNotCallEver.
+void* KeyboardController::Keyboard_Unhook(BYTE bFree)
 {
-	return *pointer;
+	//this->vftable_0x0 = JMPTABLE_0067b818;
+	if (this->int_0x12c)
+	{
+		if (HHOOK_008da738 != NULL)
+			UnhookWindowsHookEx(HHOOK_008da738);
+
+		HHOOK_008da738 = NULL;
+		DAT_008da73c = NULL;
+		this->int_0x12c = 0;
+		this->byte_0x130 = 0;
+	}
+	//this->vftable_0x0 = JMPTABLE_0067b738;
+	if (bFree & 1)
+		delete this;
+
+	return this;
 }
-
-
-
