@@ -14,6 +14,7 @@
 #include <stdarg.h>
 #include <strsafe.h>
 #include <math.h>
+#include <string.h>
 
 // Direct X
 // D3D9.DLL
@@ -52,8 +53,6 @@ DLGPROC g_dlgproc;
 LPCSTR lpOperation_0066ab90;
 
 const char16_t* u_NO_TEXT_0066b38c = u"NO_TEXT";
-
-
 
 // These are treated like an array, AutoClass31s have an index into these DATs
 uint DAT_0069ba70;
@@ -326,6 +325,62 @@ struct Settings Settings;
 
 
 
+/////////////////////////////////////////////////
+//
+// lua_CFunctions
+// 
+/////////////////////////////////////////////////
+
+sGameSettings* g_pGameSettings_008e8410;
+
+int StartGame(lua_State* L)
+{
+	//StartGameForReal(L, g_pGameSettings_008e8410);
+	return LUA_OK;
+}
+
+int IsGameStarted2(lua_State* L)
+{
+	lua_pushboolean(L, g_pGameSettings_008e8410->m_bStarted_0xa0c);
+	return LUA_YIELD;
+}
+
+
+// Instead of an sRGBA, it's treated as an array of integers.
+// I'll just change it to sRGBAs to make things easier
+sRGBA Palettes_008dd040[1]; // No idea how big the array is
+
+int GetPaletteColour(lua_State* L)
+{
+	int rounded = (int)(ulonglong)roundf(luaL_checknumber(L, 1));
+	sRGBA palette = Palettes_008dd040[rounded];
+	lua_createtable(L, 0, 0);
+	int index = lua_gettop(L);
+	
+	lua_pushnumber(L, palette.r);
+	lua_rawseti(L, index, 1);
+
+	lua_pushnumber(L, palette.g);
+	lua_rawseti(L, index, 2);
+
+	lua_pushnumber(L, palette.b);
+	lua_rawseti(L, index, 3);
+	
+	lua_pushnumber(L, palette.a);
+	lua_rawseti(L, index, 4);
+
+	return LUA_YIELD;
+}
+
+UINT LoadingTypeOrFlagsMaybe_008e8448;
+
+int UpdateLoadingBar(lua_State* L)
+{
+	if (LoadingTypeOrFlagsMaybe_008e8448)
+	{
+		//AddToLoadingBar(luaL_checknumber(L, 1));
+	}
+}
 
 /////////////////////////////////////////////////
 //
@@ -334,19 +389,20 @@ struct Settings Settings;
 /////////////////////////////////////////////////
 
 // 1 = US, 2 = Germany, not 1 or 2 = Europe
-// Germany got it's own version (after doing some more research and looking at the game files, I see they had to censor it over there.)
-// Also, my presumably US copy is set to 0, meaning Europe.
+// Germany got its own version (after doing some more research and looking at the game files, I see they had to censor it over there.)
+// Also, my Canadian copy, which I thought would be the US version is apparently the European version.
 uint version_0069c13c = 0;
-
 // I don't know if it's possible to change the value fast enough that the german intro video plays, but you can wait on the title screen to see the german version of the attract video.
-// If set to Germany in a US or Europe copy, the game will crash when loading into a map because it can't find the ragdoll models.
+// If set to Germany in a US or European copy, the game will crash when loading into a map because it can't find the ragdoll models.
 
 
 // There's already a function that is internally called StartGame so I had to change this one
 void StartStartingGame(int param_1)
 {
 	const char* version_string;
-	LuaTable* table = *(astruct_97**)(*int_008e8420 + 4);
+	lua_State* L = g_pScriptHost->lss2_0x8->L_0x4;
+	int originalTop = lua_gettop(L);
+
 	// So glad they used text
 	if (version_0069c13c == 1)
 	{
@@ -360,14 +416,329 @@ void StartStartingGame(int param_1)
 	{
 		version_string = "VERSION_EUROPE";
 	}
-	table->Lua_AddStringProperty(version_string);
 
+	lua_setglobal(L, version_string);
+	lua_pushboolean(L, TRUE);
+	lua_settable(L, -0x2712);
+
+	lua_pushcclosure(L, StartGame, 0);
+	lua_setfield(L, -0x2712, "StartGame");
+
+	lua_pushcclosure(L, IsGameStarted2, 0);
+	lua_setfield(L, -0x2712, "IsGameStarted");
+
+	/*
+	lua_pushcclosure(L, LoadReplay, 0);
+	lua_setfield(L, -0x2712, "LoadReplay");
+
+	lua_pushcclosure(L, SaveReplay, 0);
+	lua_setfield(L, -0x2712, "SaveReplay");
+	*/
+
+	lua_pushcclosure(L, DEBUGLOG, 0);
+	lua_setfield(L, -0x2712, "DebugConsolePrint");
+
+	lua_pushcclosure(L, GetPaletteColour, 0);
+	lua_setfield(L, -0x2712, "GetPaletteColor");
+
+	lua_pushcclosure(L, UpdateLoadingBar, 0);
+	lua_setfield(L, -0x2712, "UpdateLoadingBar");
+
+	lua_setglobal(L, "CompileDate");
+	lua_setglobal(L, "Version 0.28 build 2004.09.20");
+	lua_settable(L, -0x2712);
+
+	lua_pushcclosure(L, GetPhrase, 0);
+	lua_setfield(L, -0x2712, "GetPhrase");
+
+	lua_createtable(L, 0, 0);
+	int idx = lua_gettop(L);
+	lua_setglobal(L, "GameFlow");
+	lua_pushvalue(L, idx);
+	lua_settable(L, -0x2712);
+
+	lua_setglobal(L, "PrepareCupFromProfile");
+	lua_pushcclosure(L, PrepareCupFromProfile, 0);
+	lua_settable(L, idx);
+
+	lua_setglobal(L, "GetNumResults");
+	lua_pushcclosure(L, GetNumResults, 0);
+	lua_settable(L, idx);
+
+	lua_setglobal(L, "GetPlayerName");
+	lua_pushcclosure(L, GetPlayerName, 0);
+	lua_settable(L, idx);
+
+	lua_setglobal(L, "GetPlayerPosition");
+	lua_pushcclosure(L, GetPlayerPosition, 0);
+	lua_settable(L, idx);
+
+	lua_setglobal(L, "GetPlayerIdByPosition");
+	lua_pushcclosure(L, GetPlayerIdByPosition, 0);
+	lua_settable(L, idx);
+
+	lua_setglobal(L, "GetPlayerRacePoints");
+	lua_pushcclosure(L, GetPlayerRacePoints, 0);
+	lua_settable(L, idx);
+
+	lua_setglobal(L, "ClearRace");
+	lua_pushcclosure(L, ClearRace, 0);
+	lua_settable(L, idx);
+
+	lua_setglobal(L, "IsCupRaceLocked");
+	lua_pushcclosure(L, IsCupRaceLocked, 0);
+	lua_settable(L, idx);
+
+	lua_setglobal(L, "GetStuntScoreType");
+	lua_pushcclosure(L, GetStuntScoreType, 0);
+	lua_settable(L, idx);
+
+	lua_setglobal(L, "GetCupSize");
+	lua_pushcclosure(L, GetCupSize, 0);
+	lua_settable(L, idx);
+
+	lua_setglobal(L, "IsCupActive");
+	lua_pushcclosure(L, IsCupActive, 0);
+	lua_settable(L, idx);
+
+	lua_setglobal(L, "IsCupRaceCompleted");
+	lua_pushcclosure(L, IsCupRaceCompleted, 0);
+	lua_settable(L, idx);
+
+	lua_setglobal(L, "IsCupFinished");
+	lua_pushcclosure(L, IsCupFinished, 0);
+	lua_settable(L, idx);
+
+	lua_setglobal(L, "ClearCup");
+	lua_pushcclosure(L, ClearCup, 0);
+	lua_settable(L, idx);
+
+	lua_setglobal(L, "GetPlayerCupPoints");
+	lua_pushcclosure(L, GetPlayerCupPoints, 0);
+	lua_settable(L, idx);
+
+	lua_setglobal(L, "GetPlayerCupRacePosition");
+	lua_pushcclosure(L, GetPlayerCupRacePosition, 0);
+	lua_settable(L, idx);
+
+	lua_setglobal(L, "GM_NONE");
+	lua_pushnumber(L, 0.f);
+	lua_settable(L, -0x2712);
+	lua_setglobal(L, "GM_CAREER");
+	lua_pushnumber(L, 1.f);
+	lua_settable(L, -0x2712);
+	lua_setglobal(L, "GM_TIMEATTACK");
+	lua_pushnumber(L, 2.f);
+	lua_settable(L, -0x2712);
+	lua_setglobal(L, "GM_SINGLE_RACE");
+	lua_pushnumber(L, 3.f);
+	lua_settable(L, -0x2712);
+	lua_setglobal(L, "GM_INSTANT_ACTION");
+	lua_pushnumber(L, 4.f);
+	lua_settable(L, -0x2712);
+	lua_setglobal(L, "GM_CRASHTEST_DUMMY");
+	lua_pushnumber(L, 5.f);
+	lua_settable(L, -0x2712);
+	lua_setglobal(L, "GM_ONLINE_MULTIPLAYER");
+	lua_pushnumber(L, 6.f);
+	lua_settable(L, -0x2712);
+	lua_setglobal(L, "GM_PARTY");
+	lua_pushnumber(L, 7.f);
+	lua_settable(L, -0x2712);
+	lua_setglobal(L, "GM_DEVELOPER");
+	lua_pushnumber(L, 8.f);
+	lua_settable(L, -0x2712);
+	lua_setglobal(L, "GM_TOURNAMENT");
+	lua_pushnumber(L, 9.f);
+	lua_settable(L, -0x2712);
+	lua_setglobal(L, "GM_SPLITSCREEN");
+	lua_pushnumber(L, 10.f);
+	lua_settable(L, -0x2712);
+	lua_setglobal(L, "GM_TEST");
+	lua_pushnumber(L, 11.f);
+	lua_settable(L, -0x2712);
+
+	lua_setglobal(L, "GR_DEFAULT");
+	lua_pushnumber(L, 0.f);
+	lua_settable(L, -0x2712);
+	lua_setglobal(L, "GR_RACE");
+	lua_pushnumber(L, 1.f);
+	lua_settable(L, -0x2712);
+	lua_setglobal(L, "GR_STUNT");
+	lua_pushnumber(L, 2.f);
+	lua_settable(L, -0x2712);
+	lua_setglobal(L, "GR_DERBY");
+	lua_pushnumber(L, 3.f);
+	lua_settable(L, -0x2712);
+	lua_setglobal(L, "GR_HUNTER_PREY");
+	lua_pushnumber(L, 4.f);
+	lua_settable(L, -0x2712);
+	lua_setglobal(L, "GR_ARCADE_ADVENTURE");
+	lua_pushnumber(L, 5.f);
+	lua_settable(L, -0x2712);
+	lua_setglobal(L, "GR_PONGRACE");
+	lua_pushnumber(L, 6.f);
+	lua_settable(L, -0x2712);
+	lua_setglobal(L, "GR_TIMEATTACK");
+	lua_pushnumber(L, 7.f);
+	lua_settable(L, -0x2712);
+	lua_setglobal(L, "GR_TEST");
+	lua_pushnumber(L, 8.f);
+	lua_settable(L, -0x2712);
+
+	lua_setglobal(L, "CLASS_NONE");
+	lua_pushnumber(L, 0.f);
+	lua_settable(L, -0x2712);
+	lua_setglobal(L, "CLASS_C");
+	lua_pushnumber(L, 1.f);
+	lua_settable(L, -0x2712);
+	lua_setglobal(L, "CLASS_B");
+	lua_pushnumber(L, 2.f);
+	lua_settable(L, -0x2712);
+	lua_setglobal(L, "CLASS_A");
+	lua_pushnumber(L, 3.f);
+	lua_settable(L, -0x2712);
+	lua_setglobal(L, "CLASS_FINALS");
+	lua_pushnumber(L, 4.f);
+	lua_settable(L, -0x2712);
+	lua_setglobal(L, "CLASS_EXTRA");
+	lua_pushnumber(L, 5.f);
+	lua_settable(L, -0x2712);
+
+	lua_setglobal(L, "RESULT_NONE");
+	lua_pushnumber(L, 0.f);
+	lua_settable(L, -0x2712);
+	lua_setglobal(L, "RESULT_ABORTED");
+	lua_pushnumber(L, 1.f);
+	lua_settable(L, -0x2712);
+	lua_setglobal(L, "RESULT_FINISHED");
+	lua_pushnumber(L, 2.f);
+	lua_settable(L, -0x2712);
+
+	lua_setglobal(L, "STUNT_NONE");
+	lua_pushnumber(L, 0.f);
+	lua_settable(L, -0x2712);
+	lua_setglobal(L, "STUNT_CURLING");
+	lua_pushnumber(L, 1.f);
+	lua_settable(L, -0x2712);
+	lua_setglobal(L, "STUNT_BULLSEYE");
+	lua_pushnumber(L, 2.f);
+	lua_settable(L, -0x2712);
+	lua_setglobal(L, "STUNT_HIGHJUMP");
+	lua_pushnumber(L, 3.f);
+	lua_settable(L, -0x2712);
+	lua_setglobal(L, "STUNT_STONESKIPPING");
+	lua_pushnumber(L, 4.f);
+	lua_settable(L, -0x2712);
+	lua_setglobal(L, "STUNT_RINGOFFIRE");
+	lua_pushnumber(L, 5.f);
+	lua_settable(L, -0x2712);
+	lua_setglobal(L, "STUNT_DARTS");
+	lua_pushnumber(L, 6.f);
+	lua_settable(L, -0x2712);
+	lua_setglobal(L, "STUNT_BREAKDOWN");
+	lua_pushnumber(L, 7.f);
+	lua_settable(L, -0x2712);
+	lua_setglobal(L, "STUNT_BLACKDANNY");
+	lua_pushnumber(L, 8.f);
+	lua_settable(L, -0x2712);
+	lua_setglobal(L, "STUNT_SKIJUMP");
+	lua_pushnumber(L, 9.f);
+	lua_settable(L, -0x2712);
+	lua_setglobal(L, "STUNT_FIELDGOAL");
+	lua_pushnumber(L, 10.f);
+	lua_settable(L, -0x2712);
+	lua_setglobal(L, "STUNT_BOWLING");
+	lua_pushnumber(L, 11.f);
+	lua_settable(L, -0x2712);
+	lua_setglobal(L, "STUNT_BASKETBALL");
+	lua_pushnumber(L, 12.f);
+	lua_settable(L, -0x2712);
+	lua_setglobal(L, "STUNT_BASEBALL");
+	lua_pushnumber(L, 13.f);
+	lua_settable(L, -0x2712);
+	lua_setglobal(L, "STUNT_SOCCER");
+	lua_pushnumber(L, 14.f);
+	lua_settable(L, -0x2712);
+
+	lua_setglobal(L, "DERBY_NONE");
+	lua_pushnumber(L, 0.f);
+	lua_settable(L, -0x2712);
+	lua_setglobal(L, "DERBY_LMS");
+	lua_pushnumber(L, 1.f);
+	lua_settable(L, -0x2712);
+	lua_setglobal(L, "DERBY_WRECKING");
+	lua_pushnumber(L, 2.f);
+	lua_settable(L, -0x2712);
+	lua_setglobal(L, "DERBY_FRAG");
+	lua_pushnumber(L, 3.f);
+	lua_settable(L, -0x2712);
+
+	lua_setglobal(L, "DERBY_END");
+	lua_pushnumber(L, 0.f);
+	lua_settable(L, -0x2712);
+	lua_setglobal(L, "UPGRADE_DEFAULT");
+	lua_pushnumber(L, 1.f);
+	lua_settable(L, -0x2712);
+	lua_setglobal(L, "UPGRADE_NONE");
+	lua_pushnumber(L, 2.f);
+	lua_settable(L, -0x2712);
+	lua_setglobal(L, "UPGRADE_50");
+	lua_pushnumber(L, 3.f);
+	lua_settable(L, -0x2712);
+	lua_setglobal(L, "UPGRADE_100");
+	lua_pushnumber(L, 4.f);
+	lua_settable(L, -0x2712);
+
+	lua_setglobal(L, "STUNTCAR_CLASS");
+	lua_pushnumber(L, 0.f);
+	lua_settable(L, -0x2712);
+	lua_setglobal(L, "FUNNYCAR_CLASS");
+	lua_pushnumber(L, 1.f);
+	lua_settable(L, -0x2712);
+
+	lua_setglobal(L, "PLAYERTYPE_UNKNOWN");
+	lua_pushnumber(L, 0.f);
+	lua_settable(L, -0x2712);
+	lua_setglobal(L, "PLAYERTYPE_LOCAL");
+	lua_pushnumber(L, 1.f);
+	lua_settable(L, -0x2712);
+	lua_setglobal(L, "PLAYERTYPE_REMOTE");
+	lua_pushnumber(L, 2.f);
+	lua_settable(L, -0x2712);
+	lua_setglobal(L, "PLAYERTYPE_OBSERVER");
+	lua_pushnumber(L, 3.f);
+	lua_settable(L, -0x2712);
+	lua_setglobal(L, "PLAYERTYPE_AI");
+	lua_pushnumber(L, 4.f);
+	lua_settable(L, -0x2712);
+	lua_setglobal(L, "PLAYERTYPE_SIMULATED");
+	lua_pushnumber(L, 5.f);
+	lua_settable(L, -0x2712);
+
+	lua_setglobal(L, "CHARACTERTYPE_MALE");
+	lua_pushnumber(L, 0.f);
+	lua_settable(L, -0x2712);
+	lua_setglobal(L, "CHARACTERTYPE_FEMALE");
+	lua_pushnumber(L, 1.f);
+	lua_settable(L, -0x2712);
+
+
+	LoadAndSave(param_1);
+	RunLUAFromFile("data/Scripts/Levels.bed", auVar1);
+	RunLUAFromFile("data/Scripts/Classes.bed", auVar2);
+	lua_settop(L, originalTop);
 }
 
 void (*PTR_008e8418)(int);
 
+int CheckDirectXVersion(LPBYTE expectedVersion);
+HRESULT BasicDlgProc(HWND hWnd, UINT uMsg, short param_3);
+UINT SetFPUCW(USHORT in_FPUControlWord);
+void DoNothing();
+
 // Turns out, this IS WinMain. IDA detected it immediately.
-DWORD WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPCSTR lpCmdLine, int nShowCmd)
+int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PSTR lpCmdLine, int nShowCmd)
 {
 	HINST_008da564 = hInstance;
 
@@ -388,11 +759,11 @@ DWORD WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPCSTR lpCmdLine, in
 
 	// Sets unkn_008da6a0 to 1
 	SetFPUCW(FPUConW_008d781c);
-
+	LoadBfsList();
+	LoadBfsList();
 	// Appears to be unused flags, but given the kind of register-passing other functions do, maybe this does some register manipulation that LoadBinaryDatabase picks up on?
 	strstr(lpCmdLine, "-binarydb");
 	strstr(lpCmdLine, "-bedit");
-
 	//LoadBinaryDatabase(flags);
 
 	UINT_0069c2d0 = (uint)&UINT_008d7bb0;
@@ -478,7 +849,7 @@ FARPROC PTR_DirectSoundCreate8_006a85bc;
 FARPROC PTR_DirectSoundEnumerateA_006a85b8;
 uint UINT_00687984;
 uint UINT_00684b20 = 0;
-uint UINT_00684b24 = -1;
+uint UINT_00684b24 = (uint)-1;
 uint* PTR_UINT_00684570 = &UINT_00684b20;
 
 // Loads the sound module and sets UINT_00687984 to either 7, 8, or 9 based on how much was done.
@@ -523,7 +894,7 @@ void LoadDirectSoundAndDrawLibrary()
 				FILE** file = NULL;//FUN_0061f9bc(fileDir, NULL, 0);
 				if (file != NULL)
 				{
-					//OpenDLLFile(ppFVar2);
+					//OpenDLLFile(file);
 					UINT_00687984 = 9;
 				}
 			}
@@ -604,6 +975,7 @@ uint ASPI_Initialize(char param_1)
 
 exitPoint:
 	//...
+	return 0;
 }
 
 
@@ -1020,6 +1392,15 @@ struct astruct_164 {
 	uint unk_0x10, unk_0x14, unk_0x18, unk_0x20;
 };
 
+float g_fAspectRatioX_0069be18;
+float g_fAspectRatioY_0069be1c;
+
+void SetAspectRatio(float x, float y)
+{
+	g_fAspectRatioX_0069be18 = x;
+	g_fAspectRatioY_0069be1c = y;
+}
+
 INT_PTR DlgProc_SettingsPanel(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
 
 // Creating setup window
@@ -1126,28 +1507,30 @@ int CreateSetupWindow(astruct_140* param_1, HINSTANCE hInst, int showSetup, int 
 					return 0;
 				}
 			}
-			// I have no idea what's going on here.
-			hInst = (HINSTANCE)0x40800000;
-			showSetup = 0x40400000;
+			// I now know what's going on here
+			// I'm going to replace hInst and showSetup with more descriptive variables
+			float AspectX = 4.f;
+			float AspectY = 3.f;
 			switch (UINT_006d68f8)
 			{
 			case 0:
-				hInst = (HINSTANCE)0x40800000;
-				showSetup = 0x40400000;
+				AspectX = 4.f;
+				AspectY = 3.f;
 				break;
 			case 1:
-				hInst = (HINSTANCE)0x41800000;
-				showSetup = 0x41200000;
+				AspectX = 16.f;
+				AspectY = 10.f;
 				break;
 			case 2:
-				hInst = (HINSTANCE)0x41800000;
-				showSetup = 0x41100000;
+				AspectX = 16.f;
+				AspectY = 9.f;
 				break;
 			case 3:
-				hInst = (HINSTANCE)0x40a00000;
-				showSetup = 0x40800000;
+				AspectX = 5.f;
+				AspectY = 4.f;
 				break;
 			}
+			SetAspectRatio(AspectX, AspectY);
 		}
 	} while (false);
 
@@ -1338,7 +1721,7 @@ public:
 	{
 		WPARAM copy = wParam;
 		char result;
-		if ((this->wndProcIsh_0x50 != NULL) && (this->wndProcIsh_0x50(hWnd, uMsg, wParam, lParam, &copy, 0) != NULL))
+		if (this->wndProcIsh_0x50 && this->wndProcIsh_0x50(hWnd, uMsg, wParam, lParam, &copy, 0))
 			return wParam;
 
 		int* piVar1 = PTR_008da718;
@@ -1374,7 +1757,6 @@ public:
 
 			case WM_ACTIVATEAPP:
 				this->wParam_0x38 = copy;
-				break;
 
 			}
 		}
@@ -1385,8 +1767,10 @@ public:
 		}
 		else if (uMsg == WM_SYSCOMMAND)
 		{
-			if (copy == 0xF100 || copy == 0xF000 || copy == 0xF010 || copy == 0xF030 || copy == 0xF140 || copy == 0xF170)
+			// Credit to alex on the FOJ discord, Ghidra doesn't even have these as equates.
+			if (copy == SC_KEYMENU || copy == SC_SIZE || copy == SC_MOVE || copy == SC_MAXIMIZE || copy == SC_SCREENSAVE || copy == SC_MONITORPOWER)
 				return 1;
+
 		}
 		return DefWindowProcA(hWnd, uMsg, copy, lParam);
 	}
@@ -1449,7 +1833,7 @@ uint GetKeyFromRegistry(char* keyName, LPBYTE out_data, DWORD size_of_out_data)
 	LSTATUS result;
 	HKEY key;
 	CharLowerBuffA(keyName, strlen(keyName));
-	LPSTR subKey;
+	char subKey[512];
 	if (RegOpenKeyA(HKEY_CLASSES_ROOT, "clsid", &key) == ERROR_SUCCESS)
 	{
 		uint depth = 0;
@@ -1474,8 +1858,7 @@ uint GetKeyFromRegistry(char* keyName, LPBYTE out_data, DWORD size_of_out_data)
 					{
 						OFSTRUCT reOpenBuf;
 						ZeroMemory(&reOpenBuf, 0x88);
-						// Intellisense doesn't like this, but that's what it does.
-						//reOpenBuf = (OFSTRUCT)0x88;
+						reOpenBuf.cBytes = 0x88;
 						if (OpenFile((LPCSTR)out_data, &reOpenBuf, OF_EXIST))
 						{
 							output = 0;
@@ -1541,8 +1924,8 @@ static char* ReadCLSIDKey(HKEY hkey, LPCSTR subKey, int param_3, DWORD cbData)
 	}
 	else
 	{
-		int** ppiVar1 = (int**)(cbData + 0x298);
-		int* piVar4 = ReadCLSIDKey(hKey, subKey, param_3 + 1, (DWORD)*ppiVar1);
+		char** ppiVar1 = (char**)(cbData + 0x298);
+		char* piVar4 = ReadCLSIDKey(hKey, subKey, param_3 + 1, (DWORD)*ppiVar1);
 		*ppiVar1 = piVar4;
 	}
 
@@ -1608,7 +1991,7 @@ unsigned int AsyncMaxWaitTime_00684b18;
 
 void MaybeSleep(DWORD miliseconds)
 {
-	if (PTR_UINT_00684570[1] != 0xD)
+	if (UINT_00684b24 != 0xD)
 		Sleep(miliseconds);
 
 	return;
@@ -1652,6 +2035,34 @@ void MaybeSleepLoop(FILE** fileArray)
 	return;
 }
 
+BYTE lpData_006a04b8[0x104];
+
+BYTE* CreateGameSpyRegistry()
+{
+	DWORD type = REG_SZ;
+	DWORD length = 0x104;
+	HKEY hKey;
+	LSTATUS LVar2 = RegOpenKeyExA(HKEY_CURRENT_USER, "Software\\GameSpy\\GameSpy 3D\\Registration", 0, KEY_ALL_ACCESS, &hKey);
+	LSTATUS LVar3 = RegQueryValueExA(hKey, "Crypt", NULL, &type, lpData_006a04b8, &length);
+
+	if (LVar3 == ERROR_SUCCESS)
+	{
+		if (String_GetLength((const char*)lpData_006a04b8) == 19)
+			goto CreateGameSpyRegistry_Exit;
+	}
+	//FUN_005e4ad0();
+	if (LVar2 != ERROR_SUCCESS)
+	{
+		DWORD DStack_4;
+		RegCreateKeyExA(HKEY_CURRENT_USER, "Software\\GameSpy\\GameSpy 3D\\Registration", NULL, NULL, 0, KEY_ALL_ACCESS, NULL, &hKey, &DStack_4);
+	}
+	RegSetValueExA(hKey, "Crypt", NULL, REG_SZ, lpData_006a04b8, String_GetLength((const char*)lpData_006a04b8));
+
+CreateGameSpyRegistry_Exit:
+	RegCloseKey(hKey);
+
+}
+
 // The newState determines which character is set to '\1' in the string.
 // " (after 256 characters) 0 ? ? ? 2 ? ? ? 1;
 int SetState(char** out_string, int newState)
@@ -1666,7 +2077,7 @@ int SetState(char** out_string, int newState)
 	 {
 		 if (newState != 0x102)
 		 {
-			 CopyStringToPointerToString(out_string, "Invalid state.");
+			 //CopyStringToPointerToString(out_string, "Invalid state.");
 			 return 2;
 		 }
 		 theString[0x104] = '\1';
@@ -1733,11 +2144,7 @@ void NewGameSpyObject()
 	return;
 }
 
-void CreateGameSpyPresence()
-{
-	CreateGameSpyPresenceForReal();
-	return;
-}
+void InitGameSpy(GameSpyObject* gs_ESI);
 
 uint UINT_008e84e8;
 uint DAT_008e84e4;
@@ -1760,6 +2167,12 @@ void CreateGameSpyPresenceForReal()
 		UINT_008e84e8 = 0;
 	}
 	DAT_008e84e4++;
+	return;
+}
+
+void CreateGameSpyPresence()
+{
+	CreateGameSpyPresenceForReal();
 	return;
 }
 
@@ -1800,6 +2213,8 @@ void InitGameSpy(GameSpyObject* gs_ESI)
 	ppcVar1 = &gs_ESI->string_0x74;
 	SetState_s(ppcVar1, 0x102);
 }
+
+
 
 // My own addition because this may as well be a function, makes the next function much simpler.
 bool GameInvite_StringCompare(char* subject, const char* compare, int lenOfCompare)
@@ -1863,38 +2278,28 @@ struct astruct_166
 	undefined4 unkn_0x18;
 };
 
-class LobbyManager
+struct LobbyManager
 {
-private:
 	char* string_0x0;
-
 	char* sesskey_0x198;
 	char* profileid_0x1a0;
+	uint errorCode_0x430;
 	char* namespaceid_0x484;
-
-public:
-
-	void LobbyStruct_MemoryRelated(LobbyManager** pManager, void** mem, size_t newSize, uint length);
-
-	void LobbyStruct_AddString(void** param_2, char* in_string)
-	{
-		this->LobbyStruct_MemoryRelated(param_2, String_GetLength(in_string));
-	}
 };
 
 // Copies 256 characters from the in_string to the out_string, setting the
 // 256th to NULL, and the 1072nd to param_2
-void __cdecl ComplicatedCopyString(LobbyManager** pManager, uint param_2, const char* in_string)
+void __cdecl LobbyManager_Error(LobbyManager** pManager, uint errorCode, const char* in_string)
 {
-	char* _Dest = pManager->string_0x0;
-	strncpy(_Dest, in_string, 0x100);
-	_Dest[0xff] = NULL;
-	*((uint*)_Dest[0x430]) = param_2;
+	LobbyManager* manager = *pManager;
+	strncpy(manager->string_0x0, in_string, 0x100);
+	manager->string_0x0[0xff] = NULL;
+	manager->errorCode_0x430 = errorCode;
 	return;
 }
 
 
-
+// Or at least I thought it was searching for lobbies, but why would it need things like email?
 void SearchForLobbies(LobbyManager** pManager, astruct_166* param_2)
 {
 	ProfileStruct* profile = param_2->profile_0x4;
@@ -1905,7 +2310,7 @@ void SearchForLobbies(LobbyManager** pManager, astruct_166* param_2)
 	if ((param_2->int_0x8 == 0) && ((GetTickCount() - profile->int_0x144) > 60000))
 	{
 		profile->int_0x140 = 1;
-		ComplicatedCopyString(pManager, 0xD02, "The search timed out");
+		LobbyManager_Error(pManager, 0xD02, "The search timed out");
 		//FUN_005f52f0(pManager, 3, 0);
 		ReportFailureUnless(errorCode);
 		return;
@@ -2004,6 +2409,10 @@ void SearchForLobbies(LobbyManager** pManager, astruct_166* param_2)
 	}
 }
 
+
+// Some kind of generic Windows success error code
+uint ERRORCODE_SUCCESS_00683798 = 0xBB40E64E;
+
 void __fastcall ReportFailureUnless(UINT errorCode)
 {
 	if (errorCode == ERRORCODE_SUCCESS_00683798)
@@ -2013,7 +2422,8 @@ void __fastcall ReportFailureUnless(UINT errorCode)
 	__report_gsfailure();
 }
 
-void DoNothingButItsLikeARealFunction(char out_string[0x400], undefined4 param_1, char* format, ...)
+// Puts an entire 0x400 length string on the stack in order to vsprintf to it.
+void vsprintfOnStack(char out_string[0x400], undefined4 param_1, char* format, ...)
 {
 
 	va_list args;
@@ -2100,8 +2510,7 @@ PropertyDbItem mappedTable_006679b0[] =
 	{ "FadePeak", 0x407, &FadePeak_008dd4a4 }
 };
 
-// AutoClass 9
-// I thought this was the Lua interpreter, but I think it's exclusively a database thing.
+// PropertyDb
 // The way it's used reminds me of XML or JSON, it appears to be just an element, but it has functions to access more elements inside.
 class AutoClass9 {
 public:
@@ -2110,7 +2519,6 @@ public:
 	short short_0x6;
 	// 2 undefined bytes at offset 0x8, probably a short
 	short short_0xa;
-	
 
 	AutoClass9* FUN_00557fe0(char* in_string, char param_2)
 	{
@@ -2300,7 +2708,6 @@ int PropertyDb_AccessProperty(char* in_EAX)
 	return 0;
 }
 
-
 // It's effectively (floatA >= floatB)
 #define SafeGreaterThan(floatA, floatB) (floatA < floatB) == (isnan(floatA) || isnan(floatB))
 
@@ -2370,71 +2777,84 @@ struct astruct_142
 	size_t size_0x3c;
 };
 
+struct bbFileStruct
+{
+	char* filename_0x0;
+	// 4 undefined bytes at offset 0x4
+	uint unkn_0x8;
+	uint unkn_0xc;
+	// 4 undefined bytes at offset 0x10
+	FILE* file_0x14;
+	uint flags_0x18;
+	// Way too many undefined bytes at offset 0x1c
+	uint unkn_0x78;
+};
+
 BYTE buffer_006a0af8[8192];
 
 int bbOpenFile(char** param_1, astruct_142* param_2)
 {
 	char* pcVar1 = *param_1;
-	char** ppcVar2 = (char**)GetItem(param_2->filenameList_0x4, param_2->filenameIndex_0x24);
-	// Maybe it's a struct instead of array?
-	if (!((int)ppcVar2[6] & 4))
-	{
-		if (!((int)ppcVar2[6] & 2))
-		{
-			if (ppcVar2[5] == NULL)
-			{
-				undefined4* puVar3;
-				FILE* pFVar4 = fopen(*ppcVar2, "rb");
-				ppcVar2[5] = (char*)pFVar4;
-				if (pFVar4 == NULL)
-				{
-					puVar3 = (undefined4*)malloc(0x14);
-					if (puVar3 != NULL)
-					{
-						*puVar3 = NULL;
-						puVar3[1] = NULL;
-						puVar3[2] = NULL;
-						puVar3[3] = NULL;
-						puVar3[4] = NULL;
+	bbFileStruct* bbFile = (bbFileStruct*)GetItem(param_2->filenameList_0x4, param_2->filenameIndex_0x24);
 
-						*puVar3 = param_2->unkn_0x14;
-						puVar3[1] = 0x80F;
-						puVar3[2] = param_2->filenameIndex_0x24;
-						puVar3[3] = 0x900;
-						//FUN_005f4fd0(param_1, pcVar1 + 0x1D4, pcVar1 + 0x1D8, puVar3, 0, 7);
+	if (!(bbFile->flags_0x18 & 4))
+	{
+		if (!(bbFile->flags_0x18 & 2))
+		{
+			if (bbFile->file_0x14 == NULL)
+			{
+				undefined4* newStruct;
+				FILE* file = fopen(bbFile->filename_0x0, "rb");
+				bbFile->file_0x14 = file;
+				if (file == NULL)
+				{
+					newStruct = (undefined4*)malloc(0x14);
+					if (newStruct != NULL)
+					{
+						newStruct[0] = NULL;
+						newStruct[1] = NULL;
+						newStruct[2] = NULL;
+						newStruct[3] = NULL;
+						newStruct[4] = NULL;
+
+						newStruct[0] = (uint)param_2->unkn_0x14;
+						newStruct[1] = 0x80F;
+						newStruct[2] = param_2->filenameIndex_0x24;
+						newStruct[3] = 0x900;
+						//FUN_005f4fd0(param_1, pcVar1 + 0x1D4, pcVar1 + 0x1D8, newStruct, 0, 7);
 					}
 				bbOpenFileExit:
 					//FUN_005f3650(param_1, param_2, 0);
-					ppcVar2[6] = (char*)((uint)ppcVar2[6] | 8);
-					ppcVar2[0x1E] = (char*)0x900;
+					bbFile->flags_0x18 |= 8;
+					bbFile->unkn_0x78 = 0x900;
 					return 0;
 				}
-				int fileInfo = GetInfoOnFile();
-				if (fileInfo) return fileInfo;
+				//int fileInfo = GetInfoOnFile(bbFile, );
+				//if (fileInfo) return fileInfo;
 
 				//FUN_005f6150(ppcVar2 + 8);
-				puVar3 = (undefined4*)malloc(0x14);
-				if (puVar3 != NULL)
+				newStruct = (undefined4*)malloc(0x14);
+				if (newStruct != NULL)
 				{
-					*puVar3 = NULL;
-					puVar3[1] = NULL;
-					puVar3[2] = NULL;
-					puVar3[3] = NULL;
-					puVar3[4] = NULL;
+					*newStruct = NULL;
+					newStruct[1] = NULL;
+					newStruct[2] = NULL;
+					newStruct[3] = NULL;
+					newStruct[4] = NULL;
 
-					*puVar3 = param_2->unkn_0x14;
-					puVar3[1] = 0x80F;
-					puVar3[2] = param_2->filenameIndex_0x24;
-					puVar3[3] = 0x900;
-					//FUN_005f4fd0(param_1, pcVar1 + 0x1D4, pcVar1 + 0x1D8, puVar3, 0, 7);
+					*newStruct = (uint)param_2->unkn_0x14;
+					newStruct[1] = 0x80F;
+					newStruct[2] = param_2->filenameIndex_0x24;
+					newStruct[3] = 0x900;
+					//FUN_005f4fd0(param_1, pcVar1 + 0x1D4, pcVar1 + 0x1D8, newStruct, 0, 7);
 				}
 			}
-			if (ppcVar2[2] < ppcVar2[3])
+			if (bbFile->unkn_0x8 < bbFile->unkn_0xc)
 			{
 				do
 				{
 					if (*(param_2->unkn_0x20 + 0x30)) break;
-					size_t sVar6 = fread(buffer_006a0af8, 1, 0x2000, (FILE*)ppcVar2[5]);
+					size_t sVar6 = fread(buffer_006a0af8, 1, 0x2000, bbFile->file_0x14);
 					if (sVar6)
 					{
 						//FUN_005f6a90(ppcVar8 + 8, buffer_006a0af8, sVar6);
@@ -2443,24 +2863,26 @@ int bbOpenFile(char** param_1, astruct_142* param_2)
 
 						param_2->size_0x3c += sVar6;
 					}
-				}
+				} while (bbFile->unkn_0x8 < bbFile->unkn_0xc);
 			}
+			//...
 		}
 	}
 }
 
-// Some kind of generic Windows success error code
-uint ERRORCODE_SUCCESS_00683798 = 0xBB40E64E;
 
+/*
 void __fastcall GetInfoOnFile(int unaff_EBX, int unaff_ESI)
 {
 	uint errorCode = ERRORCODE_SUCCESS_00683798;
 	uint uVar1 = fstat((*(int*)(unaff_EBX + 0x14) + 0x10), &local_68);
 
 }
+*/
 
 void (**PTR_JMPTABLE_008da700)()  = NULL;
 
+/*
 void LoadBinaryDatabase(char *flags)
 {
 	int* piVar1;
@@ -2520,10 +2942,9 @@ void LoadBinaryDatabase(char *flags)
 	CreateErrorMessageAndDie("Failed to load binary database \'%s\'!");
 	return;
 }
+*/
 
-
-
-void InitOpenBFS(LPCSTR lpFilename, register char** in_EAX)
+void InitOpenBFS(LPCSTR lpFilename, register YetAnotherFileObject* in_EAX)
 {
 	void* pvVar2 = malloc(0x224);
 	void* uVar3;
@@ -2535,7 +2956,7 @@ void InitOpenBFS(LPCSTR lpFilename, register char** in_EAX)
 	//if (in_EAX[2] == in_EAX[1])
 		//FUN_00434840();
 
-	in_EAX[1] += 4;
+	in_EAX->size_0x4 += 4;
 
 	return;
 }
@@ -2546,7 +2967,7 @@ bool WriteCharToStream(char in_char, FILE* file)
 }
 
 // I'm not very familiar with FPUs, so I don't know what's going on.
-uint SetFPUCW(ushort in_FPUControlWord)
+UINT SetFPUCW(USHORT in_FPUControlWord)
 {
 	uint copyOfWhat;
 
@@ -2594,6 +3015,47 @@ HANDLE CreateThreadAndSetPriority(const char* name, LPTHREAD_START_ROUTINE lpSta
 	return hThread;
 }
 
+struct bbThread
+{
+	// 4 undefined bytes at offset 0x0
+	DWORD threadId_0x4;
+	HANDLE handle_0x8;
+	HANDLE hEvent_0xc;
+};
+
+ULONG __stdcall ThreadUpdate(LPVOID thread)
+{
+	//FUN_004e3780();
+	// (UINT_008dcad8 + 0x10)();
+	DWORD DVar1 = WaitForSingleObject(((bbThread*)(thread))->hEvent_0xc, 20);
+	while (DVar1 != WAIT_OBJECT_0)
+	{
+		//FUN_004e3780();
+		//(UINT_008dcad8 + 0x10)();
+		//FUN_004e2290(thread);
+		DVar1 = WaitForSingleObject(((bbThread*)(thread))->hEvent_0xc, 20);
+	}
+	return 0;
+}
+
+bbThread* UINT_008da62c;
+
+int CreateUpdateThread()
+{
+	bbThread* thread = UINT_008da62c;
+	HANDLE* pHandle = &thread->handle_0x8;
+
+	if (thread->handle_0x8 == NULL)
+	{
+		HANDLE handle = CreateEventA(NULL, FALSE, FALSE, NULL);
+		thread->hEvent_0xc = handle;
+		handle = CreateThread(NULL, 0, ThreadUpdate, thread, 0, &thread->threadId_0x4);
+		SetThreadPriority(handle, 0xF);
+	}
+	
+	return 0;
+}
+
 
 /////////////////////////////////////////////////
 //
@@ -2633,7 +3095,7 @@ void DoNothing8()
 }
 
 // Function that doesn't do anything but apparently was for debug logging.
-uint DEBUGLOG()
+int DEBUGLOG(lua_State* L)
 {
 	return 0;
 }
@@ -2654,7 +3116,7 @@ void sprintf_strange(undefined4 param_1, char* format, ...)
 	// This function reaches backwards into the stack to get the string to copy to.
 	char* local_404 = (char*)((&param_1) - 0x400);
 
-	errorCode = ERRORCODE_SUCCESS_00683798;
+	UINT errorCode = ERRORCODE_SUCCESS_00683798;
 	vsprintf(local_404, format, list);
 	ReportFailureUnless(errorCode); // Does this do anything?
 }
@@ -2696,6 +3158,7 @@ undefined4 Depointerize(undefined4* output)
 // Functions where the p-code view doesn't really tell you anything, so I imagine it was written in assembly.
 // I've never written assembly functions in C, do I just put it under my own labels like so, or do I wrap it in a C function? I guess it's easy to fix if I didn't do it right.
 //
+/*
 __asm
 {
 	SetALRegisterTo1:
@@ -2714,6 +3177,7 @@ __asm
 		mov eax, 0x6
 		ret
 }
+*/
 
 
 

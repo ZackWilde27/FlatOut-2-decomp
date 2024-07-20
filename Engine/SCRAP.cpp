@@ -31,7 +31,7 @@ const char* verString_00698b4c = "Version 0.28 build 2004.09.20";
 // Cheat Engine says this value is initialized to 0, so it always overrides.
 int g_slashOverride = 0;
 
-// SlashConvertString:
+// NormalizeFilePath: (Formerly SlashConvertString)
 //
 // This function copies the in_string to the out_string, returning the length of the in_string.
 // It'll also convert uppercase to lowercase.
@@ -47,7 +47,7 @@ int g_slashOverride = 0;
 // Starts at the location after the first NULL in the out_string
 // If mode is 3, or g_slashOverride is 0, it'll convert slashes to backslashes and vise-versa
 // By the end, in_string will point at the character after the ending NULL
-int SlashConvertString(uchar* in_string, int mode, uchar* out_string)
+int NormalizeFilePath(uchar* in_string, int mode, uchar* out_string)
 {
 	uchar* tempPtr;
 	uchar currentChar;
@@ -187,9 +187,8 @@ char String_CompareEnd(char* out_string, char* in_string, int length)
 	return NULL;
 }
 
-// They have a String_GetLength function but there are a lot of places that counted the string manually.
-// Did the person who wrote this forget to tell anyone else about it? Was it written later and those functions were already implemented?
-// I just decided to replace them with a GetLength call
+// So, all of the places that counted the string manually was Ghidra's fault
+// It seems like strlen is an inline function where it just copy-pastes the code instead of a call/return.
 int String_GetLength(const char* in_string)
 {
 	char* tempPtr = (char*)in_string;
@@ -281,15 +280,6 @@ char* String_AppendSubstring(char* out_string, char* in_string, int length)
 	return original;
 }
 
-void static CopyStringToPointerToString(char** out_string, const char* in_string)
-{
-	char* _Dest;
-	_Dest = *out_string;
-	strncpy(_Dest, in_string, 0x100);
-	_Dest[0xFF] = NULL;
-	return;
-}
-
 // It's the same as Microsoft's tolower() except 'A' - 'a' is precalculated, happens to be the space character.
 char Char_ToLowercase(char theChar)
 {
@@ -356,6 +346,7 @@ bool StringToNum(char* stringFloat, float* outFloat)
 	return nullTerminated;
 }
 
+// This is apparently strchr(), which makes it's oddities even more confusing.
 static char* String_IndexOfAlmost(char* string, char theChar)
 {
 	// This function has 3 stages:
@@ -427,6 +418,8 @@ static char* String_IndexOfAlmost(char* string, char theChar)
 	return NULL;
 }
 
+
+
 int WString_GetLength(const wchar_t* in_wstring)
 {
 	wchar_t c;
@@ -441,7 +434,26 @@ int WString_GetLength(const wchar_t* in_wstring)
 	return ((tempstring - in_wstring) >> 1) - 1;
 }
 
+wchar_t* WString_SimpleCopy(wchar_t* Dst, wchar_t* Src)
+{
+	wchar_t* tempPtr = Dst;
+	wchar_t current;
 
+	do
+	{
+		current = *Src;
+		*tempPtr = current;
+		tempPtr += 2;
+		Src += 2;
+	} while (current != NULL);
+
+	return Dst;
+}
+
+HGLOBAL GlobalAllocGPTR(SIZE_T dwBytes)
+{
+	return GlobalAlloc(GPTR, dwBytes);
+}
 
 
 /////////////////////////////////////////////////
@@ -457,7 +469,6 @@ void CreateErrorMessageAndDie(const char* message, ...)
 	char body[1024];
 
 	// The list of arguments to put into the message is the rest of the CPU stack, meaning the inputs of the last-called function.
-	// I'm not quite sure how that works, I'm new to the ... operator
 	va_list list;
 	va_start(list, message);
 
@@ -504,7 +515,6 @@ void (*LiteDb_vftable_0067b1c0[])() = {
 
 // The no jumptable
 void (*NOJMPTABLE_0067ad08[58])() = {};
-void* DoNotCallEverExceptItsNotBlockedOff(void* jmpTable, int bFree);
 
 // Instead of writing all that out I'll replace it with code that would do the same thing
 // 56 of them are ExitWithCode25, and the last one is a duplicate of DoNotCallEver except without the error message
@@ -513,17 +523,17 @@ void CreateThatWeirdJumpTable()
 	for (int i = 0; i < 57; i++)
 		NOJMPTABLE_0067ad08[i] = ExitWithCode25;
 
-	NOJMPTABLE_0067ad08[57] = (void (*)())DoNotCallEverExceptItsNotBlockedOff;
+	//NOJMPTABLE_0067ad08[57] = (void (*)())PropertyDb::Destructor;
 }
 
-// So it turns out that DoNotCallEver has a duplicate that doesn't create the error message, so what is the first one?
-void* DoNotCallEverExceptItsNotBlockedOff(void* jmpTable, int bFree)
+
+PropertyDb* PropertyDb::Destructor(int bDestruct)
 {
-	jmpTable = &NOJMPTABLE_0067ad08;
-	if (bFree & 1)
-		free(jmpTable);
+	this->vftable_0x0 = NOJMPTABLE_0067ad08;
+	if (bDestruct & 1)
+		delete this;
 	
-	return jmpTable;
+	return this;
 }
 
 
@@ -533,19 +543,21 @@ void* DoNotCallEverExceptItsNotBlockedOff(void* jmpTable, int bFree)
 // RR: Change 0x00C8C428 to  0x006E2CE0 while the intro is playing and it'll crash before the title is shown.
 
 // This function is under AutoClass8, it doesn't show up in Ghidra's Functions tree for some reason.
-void* DoNotCallEver(void** self, int bFree)
+// DoNotCallEver is the destructor for PropertyDb. It tells you not to call it for obvious reasons.
+// I do wonder though, why not just put an empty function there? I guess it was to catch more bugs in development.
+PropertyDb* PropertyDb::DoNotCallEver(int bFree)
 {
 	// Seems like a default value maybe.
-	self->vtable_0x0 = &LiteDb_vftable_0067b1c0;
+	this->vftable_0x0 = LiteDb_vftable_0067b1c0;
 	CreateErrorMessageAndDie("Must not be called - ever.");
 
 	// If you bypassed the error message in FO2, this jump table would be replaced with one where every function except for one will exit with code 25
 	// I checked, and bypassing the error message just silently crashes anyways
-	self->vtable_0x0 = &NOJMPTABLE_0067ad08;
+	this->vftable_0x0 = NOJMPTABLE_0067ad08;
 	if (bFree & 1)
-		free(self);
+		delete this;
 
-	return self;
+	return this;
 }
 
 
@@ -556,377 +568,15 @@ void* DoNotCallEver(void** self, int bFree)
 //
 /////////////////////////////////////////////////
 
-// I'm finally starting to understand this one, I think
-// There are a lot of functions where the first parameter is a pointer to this struct, even if they don't reference it, leading me to believe it's part of a class/bugbear method system.
-// I'll just make it a C++ class to make things easier.
+// Thanks to Sewer56 for helping me get their disassembly opening
 
-
-uint LuaTable::AttemptToYield(int index)
+uint __fastcall GetScriptParameterInt(LuaStateStruct* lss, int unaff_ESI)
 {
-	if (this->bDebug_0x34)
-		//this->LuaLogMaybe("attempt to yield across metamethod/C-call boundary");
-		DoNothing();
-
-	this->table_0xc = this->next_0x8 + (index * -2);
-	this->field7_0x6 = 1;
-}
-
-void LuaTable::Lua_AddNilProperty()
-{
-	// No bounds checking, If there's a way to access this function from lua it would be interesting to see what happens if this is spammed.
-
-	// Data is just left as is, could be anything.
-	this->next_0x8->type = LT::nil;
-	// Turns out adding by 2 was ghidra's mistake, and my first assumption was right. Looking at the machine code it clearly adds 8 but the p-code view showed it as 2 pointers without mentioning it.
-	this->next_0x8 += size_of(LuaItem);
-}
-
-// Everything I've seen so far suggests that this function only takes standard strings as input, but sometimes it's given a wide string and I can't figure out how that doesn't break things.
-void LuaTable::Lua_ActuallyAddStringProperty(const char* in_string, size_t length)
-{
-	// Some kind of bounds checking I assume
-	/*
-	if (this->field10_0x10[0x10] <= this->field10_0x10[0x11])
-	{
-		this->FUN_005ba3a0();
-	}
-	*/
-
-	LuaItem* pNext = this->next_0x8;
-
-	// It's quite the rabbit hole of a function, still figuring it out.
-	//pNext->data = this->Lua_NewStringStructMaybe(in_string, length);
-
-	pNext->type = LT::string;
-	this->next_0x8 += size_of(LuaItem);
-}
-
-void LuaTable::Lua_AddStringProperty(const char* in_string)
-{
-	if (in_string == NULL)
-		this->Lua_AddNilProperty();
-	else
-		this->Lua_ActuallyAddStringProperty(in_string, String_GetLength(in_string));
-
-	return;
-}
-
-void LuaTable::Lua_AddStringProperty2(char* in_string)
-{
-	LuaItem* pItem = this->next_0x8;
-
-	//pItem->data = this->Lua_NewStringStructMaybe(in_string, String_GetLength(in_string));
-	pItem->type = LT::string;
-
-	//if ((this->field16_0x1c - this->next_0x8) < 9)
-		//this->FUN_005b8790(1);
-
-	this->next_0x8 += size_of(LuaItem);
-}
-
-void LuaTable::Lua_AddBoolProperty(bool in_bool)
-{
-	LuaItem* pNext = this->next_0x8;
-	pNext->data = (void*)in_bool;
-	pNext->type = LT::boolean;
-	this->next_0x8 += size_of(LuaItem);
-}
-
-void LuaTable::Lua_AddUserDataProperty(void* userdata)
-{
-	LuaItem* pNext = this->next_0x8;
-	pNext->data = userdata;
-	pNext->type = LT::userdata;
-	this->next_0x8 += size_of(LuaItem);
-}
-
-void LuaTable::Lua_AddNumberPropertyFromInt(int in_number)
-{
-	LuaItem* pNext = this->next_0x8;
-	float converted = (float)in_number;
-	pNext->data = *(void**)&converted;
-	pNext->type = LT::number;
-	this->next_0x8 += size_of(LuaItem);
-}
-
-void LuaTable::Lua_AddNumberPropertyFromFloat(float in_number)
-{
-	LuaItem* pNext = this->next_0x8;
-	pNext->data = *(void**)&in_number;
-	pNext->type = LT::number;
-	this->next_0x8 += size_of(LuaItem);
-}
-
-// Seems like the LuaTable has several different tables, or maybe it's like one big table that has temporary pointers
-// If the index is equal to or greater than 1:
-//		The 1-based index into table_0xc
-// If index is less than 1, it's compared to specific values to determine the list to return. These numbers seem arbitrary and I wonder if part of the number is a flag.
-//		-1002 : field56_0x44
-//		-1001 :  some math involving field11_0x14
-//		-1000 : table_0x10 + 0x17
-// -1000 is the registry apparently, I don't know if that's related to the windows registry at all.
-
-LuaItem* LuaTable::Lua_GetItem(int index)
-{
-	LuaItem* output;
-	if (index < 1)
-	{
-		if (index < -0x270F)
-		{
-
-			switch (index)
-			{
-
-			case -0x2710:
-				output = (LuaItem*)this->field10_0x10 + 0x17;
-				break;
-
-			case -0x2711:
-				this->field61_0x4c = *(int*)(*this->field11_0x14[1] + 0xC);
-				this->field62_0x50 = 5;
-				output = (LuaItem*)&this->field61_0x4c;
-				break;
-
-			case -0x2712:
-				output = this->table_0x44;
-				break;
-
-			default:
-				if ((*this->field11_0x14[1] + 7) < -0x2712 - index)
-					output = &LuaItem_None_0065271c;
-				else
-					output = (LuaItem*)(*this->field11_0x14[1] + 0xC + (-0x2712 - index) * 8);
-
-			}
-
-		}
-	}
-	else
-	{
-
-		output = (LuaItem*)(this->table_0xc - 8 + index * 8);
-		if (output > this->next_0x8)
-			output = &LuaItem_None_0065271c;
-
-	}
-
-	return output;
-}
-
-
-int LuaTable::Lua_GetItemType(int index)
-{
-	LuaItem* pItem = this->Lua_GetItem(index);
-
-	if (pItem == &LuaItem_None_0065271c)
-		return (int)-1;
-
-	return pItem->type;
-}
-
-
-void LuaTable::Lua_RemoveItem(int index)
-{
-	LuaItem* tempItem;
-	LuaItem* pItem = this->Lua_GetItem(index);
-
-	while ((tempItem = pItem + size_of(LuaItem), tempItem < this->next_0x8))
-	{
-		pItem->data = tempItem->data;
-		pItem->type = tempItem->type;
-		pItem = tempItem;
-	}
-
-	this->next_0x8 -= size_of(LuaItem);
-}
-
-// Duplicates the last item in the table, inserting it at index.
-void LuaTable::Lua_InsertLastItem(int index)
-{
-	LuaItem* firstItem = this->Lua_GetItem(index);
-
-	for (LuaItem* i = this->next_0x8; i > firstItem; i -= size_of(LuaItem))
-	{
-		i->data = i[-1].data;
-		i->type = i[-1].type;
-	}
-
-	LuaItem* pNext = this->next_0x8;
-	firstItem->data = pNext->data;
-	firstItem->type = pNext->type;
-}
-
-
-void LuaTable::Lua_DuplicateItem(int index)
-{
-	// 2 more local variables are declared, but never used.
-	LuaItem* pItem = this->Lua_GetItem(index);
-	LuaItem* pNext = this->next_0x8;
-
-	pNext->data = pItem->data;
-	pNext->type = pItem->type;
-
-	this->next_0x8 += 8;
-}
-
-bool LuaTable::Lua_StringFromNumber(LuaItem* pItem)
-{
-	char local_28[4];
-
-	if (pItem->type == LT::number)
-	{
-		float num = *(float*)&pItem->data;
-		sprintf(local_28, "%.5g", num);
-
-		//pItem->data = this->Lua_NewStringStructMaybe(local_28, String_GetLength(local_28))
-
-		pItem->type = LT::string;
-		return true;
-	}
-	
-	return false;
-}
-
-void LuaTable::Lua_SeekNextPtr(int newIndex)
-{
-	if (newIndex < 0)
-		this->next_0x8 += (newIndex * 8) + 8;
-	else
-	{
-		while (this->next_0x8 < (this->table_0xc + (newIndex * 8)))
-			this->Lua_AddNilProperty();
-
-		this->next_0x8 = this->table_0xc + (newIndex * 8);;
-	}
-}
-
-bool LuaTable::Lua_IsNumber(int index)
-{
-	LuaItem* pItem = this->Lua_GetItem(index);
-	if (pItem->type != LT::number)
-	{
-		LuaItem tempItem;
-		return Lua_NumberFromString(pItem, &tempItem) != NULL;
-	}
-	return true;
-}
-
-bool LuaTable::Lua_IsUserData(int index)
-{
-	LuaItem* pItem = this->Lua_GetItem(index);
-	return pItem->type == LT::userdata_s || pItem->type == LT::userdata;
-}
-
-
-
-LuaItem* LuaTable::Lua_NumberFromString(LuaItem* pStringItem, LuaItem* pNewNumberItem)
-{
-	if (pStringItem->type != LT::number)
-	{
-		float converted;
-		if (pStringItem->type == LT::string && StringToNum((wchar_t*)&((LuaString*)pStringItem->data)->theString_0x10, &converted))
-		{
-			// floats are the same size as a void*, but you can't just (void*)
-			pNewNumberItem->data = *(void**)&converted;
-			pNewNumberItem->type = LT::number;
-			pStringItem = pNewNumberItem;
-		}
-		else
-			pStringItem = NULL;
-	}
-	return pStringItem;
-}
-
-LuaItem* NumberFromString2(LuaItem* pItem1, LuaItem* pItem2)
-{
-	if (pItem1->type != LT::number)
-	{
-		if ((pItem1->type == LT::string) && StringToNum(((LuaString*)pItem1->data)->theString_0x10, &local_8))
-	}
-}
-
-float LuaTable::Lua_GetNumberAsFloat(int index)
-{
-	LuaItem* pItem = this->Lua_GetItem(index);
-	LuaItem tempItem;
-
-	if (pItem->type != LT::number && (pItem = Lua_NumberFromString(pItem, &tempItem), pItem == NULL))
-		return 0.f;
-
-	return *(float*)&pItem->data;
-}
-
-long LuaTable::Lua_GetNumberAsInt(int index)
-{
-	LuaItem* pItem = this->Lua_GetItem(index);
-	if (pItem->type != LT::number && (pItem = Lua_NumberFromString(pItem, &tempItem), pItem == NULL))
-		return 0;
-
-	return (long)*(float*)&pItem->data;
-}
-
-LuaItem* LuaTable::Lua_GetNumberItem(int index)
-{
-	LuaItem tempItem;
-	LuaItem* pItem = this->Lua_GetItem(index);
-	if (pItem->type != LT::number)
-		pItem = NumberFromString2(pItem, &tempItem);
-
-	return pItem;
-}
-
-BOOL LuaTable::Lua_IsNumber_s(int index, LuaTable* otherTable)
-{
-	float extraout_ST0;
-
-	LuaItem* pItem = this->Lua_GetNumberItem(index);
-	float fVar1 = extraout_ST0;
-
-	BOOL whateverThisIs = ((fVar1 < 0.0) << 8 | (isnan(fVar1) << 10) | ((fVar1 == 0.0) << 0xE));
-
-	BOOL isNumber = (((BOOL)pItem & 0xFFFF0000) | whateverThisIs);
-	if (isnan(fVar1) != (fVar1 == 0.0))
-	{
-		isNumber = this->Lua_IsNumber(index);
-		if (isNumber == 0)
-			this->Lua_ReportError(index, LT::number);
-	}
-	return isNumber;
-}
-
-
-bool LuaTable::Lua_GetBool(int index)
-{
-	LuaItem* pItem = this->Lua_GetItem(index);
-	if (pItem->type == LT::boolean)
-		return pItem->data != 0;
-
-	return pItem->type != LT::nil;
-}
-
-// New struct that I gotta figure out
-void* LuaTable::Lua_GetThread(int index)
-{
-	void* result;
-
-	LuaItem* pItem = this->Lua_GetItem(index);
-
-	if (pItem->type == LT::thread)
-		result = pItem->data;
-	else
-		result = NULL;
-
-	return result;
-}
-
-
-uint __fastcall Lua_GetVersion(LuaTable** table_EAX, int unaff_ESI)
-{
-	int type = table_EAX[0]->Lua_GetItemType((int)table_EAX[1]);
-	if (type == LT::boolean)
-		return table_EAX[0]->Lua_GetBool((int)table_EAX[1]);
-
-	float data = table_EAX[0]->Lua_GetNumber((int)table_EAX[1]);
+	int type = lua_type(lss->L_0x0, lss->index_0x4);
+	if (type == LUA_TBOOLEAN)
+		return lua_toboolean(lss->L_0x0, lss->index_0x4);
+
+	float data = lua_tonumber(lss->L_0x0, lss->index_0x4);
 
 	// Some intense bit manipulation is about to happen
 	uint intForm = *(uint*)&data;
@@ -938,499 +588,86 @@ uint __fastcall Lua_GetVersion(LuaTable** table_EAX, int unaff_ESI)
 	//return (((intForm | 0xFF800000) << 8) >> (0x1F - (uchar)type & 0x1F) ^ intForm >> 31) - intForm >> 31 & ~(type >> 31);
 }
 
-wchar_t* LuaTable::Lua_GetStringItem(int index, UINT* out_length)
+void __fastcall Lua_PadTableIfNeeded(int newLength_EAX, lua_State** unaff_EDI)
 {
-	LuaItem* pItem = this->Lua_GetItem(index);
-	if (pItem->type != LT::string)
-	{
-		if (Lua_StringFromNumber(pItem) == 0)
-		{
-			if (out_length != NULL)
-				*out_length = 0;
-			return NULL;
-		}
-		//if (this->field10_0x10[0x10] <= this->field10_0x10[0x11])
-			//this->FUN_005ba3a0();
-		pItem = this->Lua_GetItem(index);
-	}
-	if (out_length != NULL)
-		*out_length = (uint)((LuaString*)(pItem->data))->length_0xc;
-
-	return ((LuaString*)(pItem->data))->theString_0x10;
-}
-
-wchar_t* LuaTable::Lua_GetStringItem_s(int index, UINT* out_length)
-{
-	wchar_t* text;
-	text = this->Lua_GetStringItem(index, out_length);
-	if (text == NULL)
-		this->Lua_ReportError(index, LT::string);
-
-	return text;
-
-}
-
-char* LuaTable::Lua_GetItemStringLength(int index)
-{
-	char* result;
-	LuaItem* pItem = this->Lua_GetItem(index);
-	switch (pItem->type)
-	{
-
-	case LT::number:
-		if (Lua_StringFromNumber(pItem) == 0)
-			result = NULL;
-		else
-			result = ((LuaString*)(pItem->data))->length_0xc;
-		break;
-
-	case LT::string:
-		result = ((LuaString*)(pItem->data))->length_0xc;
-		break;
-
-	case LT::table:
-		//result = FUN_005c0510(pItem->data);
-		break;
-
-	// I thought being put after default means it couldn't be reached but it turns out it can
-	// I'll move it above default to make things less confusing.
-	case LT::userdata_s:
-		result = ((LuaUserDataS*)pItem->data)->length_0x10;
-		break;
-
-	default:
-		result = NULL;
-	}
-	return result;
-}
-
-int LuaTable::Lua_Printf(char* format, ...)
-{
-	va_list list;
-	va_start(list, format);
-
-	uint local_8 = 1;
-	//this->Lua_AddStringProperty2("");
-
-	char* puVar1;
-	LuaItem* pNext;
-	int local_3c;
-	void* puVar2;
-
-	while (puVar1 = String_IndexOfAlmost(format, '%'), puVar1 != NULL)
-	{
-		pNext = this->next_0x8;
-		local_3c = puVar1 - format;
-		puVar2 = this->Lua_NewStringStructMaybe(format, local_3c);
-		pNext->data = puVar2;
-		pNext->type = LT::string;
-		if (this->endOfTable_0x1c - (int)this->next_0x8 < 9)
-		{
-			local_3c = 1;
-			//this->FUN_005b8790(1);
-		}
-		this->next_0x8 += 8;
-		switch (puVar1[1])
-		{
-		case '%':
-			local_3c = "%";
-			this->Lua_AddStringProperty2("%");
-			break;
-
-		default:
-			this->Lua_AddStringProperty2(&local_3c);
-			break;
-		}
-
-	}
-}
-
-// Returns the name of a type
-const char* LuaTable::Lua_StringTypeFromInt(int type)
-{
-	if (type == -1)
-		return "no value";
-	else
-		return LuaTypes_0065284c[type];
-}
-
-struct LuaUserDataS
-{
-	// 8 undefined bytes at offset 0x0
-	LuaUserData* userdata_0x8;
-	// 4 undefined bytes at offset 0xC
-	int length_0x10;
-};
-
-// I'm not sure if the userdata uses the same struct as the strings
-LuaUserData* LuaTable::Lua_GetUserdata(int index)
-{
-	LuaItem* pItem = this->Lua_GetItem(index);
-
-	if (pItem->type == LT::userdata)
-		return (LuaUserData*)pItem->data;
-
-	else if (pItem->type == LT::userdata_s)
-		// The LuaUserData struct is hidden inside another struct
-		return ((LuaUserDataS*)pItem->data)->userdata_0x8;
-
-	else
-		return NULL;
-}
-
-void __fastcall Lua_PadTableIfNeeded(int newLength_EAX, LuaTable** unaff_EDI)
-{
-	int length = unaff_EDI[1]->Lua_GetTableLength();
+	int length = lua_gettop(unaff_EDI[1]);
 	if (length < newLength_EAX)
 	{
 		length = newLength_EAX - length;
 		do
-			unaff_EDI[1]->Lua_AddNilProperty();
+			lua_pushnil(unaff_EDI[1]);
 		while (--length);
 	}
 }
 
-bool LuaTable::Lua_IsItemAStringOrNumber(int index)
+int Lua_KickPlayer(lua_State* L)
 {
-	DWORD itemType = this->Lua_GetItemType(index);
-	return (itemType == LT::string || itemType == LT::number);
-}
+	luaL_checktype(L, 1, LUA_TUSERDATA);
 
-bool LuaTable::Lua_ItemsEqual_s(int index1, int index2)
-{
-	LuaItem* pItem1 = this->Lua_GetItem(index1);
-	LuaItem* pItem2 = this->Lua_GetItem(index2);
-
-	if (pItem1 == &LuaItem_None_0065271c || pItem2 == &LuaItem_None_0065271c)
-		return false;
-	else
-		return Lua_ItemsEqual(pItem1, pItem2);
-}
-
-
-void LuaTable::Lua_ThrowIfIndexIsNotGivenType(int index, int expectedType)
-{
-	if (this->Lua_GetItemType(index) != expectedType)
-		this->Lua_ReportError(index, expectedType);
-}
-
-void LuaTable::Lua_ReportError(int index, int expectedType)
-{
-	this->Lua_ReportErrorForReal(index, expectedType);
-}
-
-// Based on the log it looks like it actually does use the expectedType, but ghidra has no idea how it was passed in C.
-// I'll just add it to the parameters
-void LuaTable::Lua_ReportErrorForReal(int index, int expectedType)
-{
-	DWORD type = this->Lua_GetItemType(index);
-	this->Lua_StringTypeFromInt(type);
-	//this->Lua_AnotherLoggingFunction("%s expected, got %s", expectedType, index);
-	//this->Lua_ErrorHandling();
-}
-
-
-// Okay, maybe this LuaTable does more than store tables.
-uint LuaTable::Lua_KickPlayer()
-{
-	this->Lua_ThrowIfIndexIsNotGivenType(1, LT::userdata_s);
-
-	LuaUserData* pUserData = (LuaUserData*)this->Lua_GetUserdata(1);
+	void* pUserData = lua_touserdata(L, 1);
 	if (pUserData == NULL)
-		this->Lua_ReportErrorForReal(1, LT::userdata_s);
+		// a type rror? a typ error?
+		luaL_typerror(L, 1, LUA_TUSERDATA);
 
 	// Function pointers have nothing on function pointers inside function pointers
 	void (**vftable1)(void(***)()) = pUserData->vftable;
 
 	// This one is not checked to see if it's null
-	pUserData = (LuaUserData*)this->Lua_GetUserdata(2);
+	pUserData = lua_touserdata(L, 2);
 	void (**vftable2)() = (void (**)())pUserData->vftable;
 
 	undefined4 local_4 = pUserData->unkn_0x4;
 	vftable1[12](&vftable2);
 }
 
-void LuaTable::StructThing(astruct_169* tableStruct)
+void StructThing(lua_State* self, astruct_169* tableStruct)
 {
 	tableStruct->end_0x0 = tableStruct + 3;
 	tableStruct->unkn_0x4 = NULL;
-	tableStruct->table_0x8 = this;
-}
-
-// Until I confirm that this item is the same as LuaTable, I'm creating a new struct
-struct TableItem
-{
-	// 7 undefined bytes at offset 0x0
-	BYTE byte_0x7;
-	TableItemStructThing* struct_0x8;
-	int unkn_0x10;
-};
-
-struct LinkedTableItem
-{
-	// 8 undefined bytes at offset 0x0
-	LuaItem item_0x8;
-	LinkedTableItem* next_0x10;
-};
-
-
-#define SafeEquals(a, b) ( (isnan(a) || isnan(b)) != (a == b) )
-
-LuaItem* FUN_005bfe40(TableItem* tableItem, LuaItem* pItem)
-{
-	LuaItem* newItem;
-	int itemType = pItem->type;
-	if (itemType != LT::nil)
-	{
-		if (itemType == LT::number)
-		{
-			// Converts from float to long to int to float, effectively rounding it.
-			ulonglong asLong = (ulonglong)*(float*)&pItem->data;
-			float rounded = (float)(int)asLong;
-
-			if (SafeEquals(*(float*)&pItem->data, rounded))
-				return Lua_GetItemFromTableItem(tableItem, asLong);
-
-		}
-		else if (itemType == LT::string)
-			return FUN_005bfde0(tableItem, pItem->data);
-
-		LinkedTableItem local_10 = Lua_GetLinkedList(tableItem, pItem);
-		// Traversing a linked list to find an equal item
-		do
-		{
-			if (Lua_ItemsEqual(local_10->pitem_0x8, pItem))
-				return local_10;
-
-			local_10 = local_10->linkedItem_0x10;
-		} while (local_10 != NULL);
-	}
-	return &LuaItem_None_0065271c;
-}
-
-struct TableItemStructThing
-{
-	// 6 undefined bytes at offset 0x0
-	BYTE byte_0x6;
-};
-
-void LuaTable::Lua_Add3ItemsAndCopy1(LuaItem* out_pItem1, LuaItem* pItem1, LuaItem* pItem2, LuaItem* pItem3)
-{
-	// I think this function is quite obfuscated, there was a lot of random math that didn't do anything and I ended up just removing it.
-	LuaItem* pNext = this->next_0x8;
-	pNext->data = pItem1->data;
-	pNext->type = pItem1->type;
-
-	//pNext = this->next_0x8;
-	pNext[1].data = pItem2->data;
-	pNext[1].type = pItem2->type;
-
-	//pNext = this->next_0x8;
-	pNext[2].data = pItem3->data;
-	pNext[2].type = pItem3->type;
-
-	//if (this->endOfTable_0x1c - this->next_0x8 < 25)
-		//this->FUN_005b8790(3);
-
-	
-	this->next_0x8 += sizeof(LuaItem) * 3;
-	//this->FUN_005b90c0(this->next_0x8 - (sizeof(LuaItem) * 3), 1);
-	this->next_0x8 -= size_of(LuaItem);
-	LuaItem* pNext = this->next_0x8;
-	out_pItem1->data = pNext->data;
-	out_pItem1->type = pNext->type;
-}
-
-LuaItem* LuaTable::FUN_005bc190(LuaItem* pItem, int param_3)
-{
-	LuaItem* result, local_8;
-
-	if (pItem->type == LT::table)
-		local_8 = pItem->data->uint_0x8;
-	else if (pItem->type == LT::userdata_s)
-		local_8 = pItem->data->uint_0x8;
-	else
-		result = this->field10_0x10[pItem->type + 0x1F];
-
-	if (local_8 == NULL)
-		result = &LuaItem_None_0065271c;
-	else
-		result = FUN_005bfde0(local_8, this->field10_0x10[param_3 + 0x28]);
-
-	return result;
-}
-
-// Based on what I've decompiled so far, it replaces it's own table with the table of an item.
-void LuaTable::Lua_gettable(LuaItem* pItem, LuaItem* pLastItem1, LuaItem* pNewItem)
-{
-	LuaItem* tempItem1;
-	LuaItem* tempItem2;
-	LuaItem* replacementItem;
-
-	// Ghidra says it was originally a do while, but it's exactly like a for so why not
-	for (uint i = 0; true; i++)
-	{
-		if (i > 99)
-		{
-			//this->LuaLogMaybe("loop in gettable");
-			return;
-		}
-
-		if (pItem->type == LT::table)
-		{
-			TableItem* tableItem = (TableItem*)pItem->data;
-			LuaItem* anotherItem = tableItem->FUN_005bfe40(pLastItem1);
-			if (anotherItem->type != LT::nil)
-			{
-SaveNewItem:
-				pNewItem->data = anotherItem->data;
-				pNewItem->type = anotherItem->type;
-				return;
-			}
-
-			if (tableItem->struct_0x8 == NULL)
-				tempItem1 = NULL;
-			else
-			{
-				if (((tableItem->struct_0x8->byte_0x6) & 1) == 0)
-					tempItem2 = FUN_005bc140(tableItem->struct_0x8, NULL, this->field10_0x10[0x28]);
-				else
-					tempItem2 = NULL;
-
-				tempItem1 = tempItem2;
-			}
-			replacementItem = tempItem1;
-
-			if (tempItem1 == NULL)
-				goto SaveNewItem;
-		}
-		else
-		{
-			replacementItem = this->FUN_005bc190(pItem, 0);
-			if (replacementItem->type == LT::function)
-			{
-				this->Lua_Add3ItemsAndCopy1(pNewItem, replacementItem, pItem, pLastItem1);
-				return;
-			}
-		}
-		pItem = replacementItem;
-	}
-}
-
-void LuaTable::CopyItemFromTableItem(int tableIndex, int itemIndex)
-{
-	LuaItem* tableItem = this->Lua_GetItem(tableIndex);
-	LuaItem* itemItem = ()(tableItem->data)
-}
-
-// It's dividing by 8, makes sense now
-int LuaTable::Lua_GetTableLength()
-{
-	return (this->next_0x8 - this->table_0xc) >> 3;
+	tableStruct->state_0x8 = self;
 }
 
 
-// It's another structish where I guess the second pointer is the index of a special item, which should be a function
-bool __fastcall Lua_IsFunction(LuaTable** in_EAX)
+int JoinCurrentSession(lua_State* L)
 {
-	DWORD type = in_EAX[0]->Lua_GetItemType((int)in_EAX[1]);
-	return type == LT::function;
-}
+	if (lua_type(L, 1) != LUA_TNIL)
+		lua_touserdata(L, 1);
 
-#define SafeEquals(floatA, floatB) ((isnan(floatA) || isnan(floatB)) != (floatA == floatB))
-
-bool Lua_ItemsEqual(LuaItem* pItem1, LuaItem* pItem2)
-{
-	bool equal;
-	if (pItem1->type == pItem2->type)
-	{
-		switch (pItem1->type)
-		{
-		case LT::nil:
-			equal = true;
-			break;
-
-		case LT::boolean:
-		case LT::userdata:
-			equal = pItem1->data == pItem2->data;
-			break;
-
-		case LT::number:
-			equal = SafeEquals(pItem1->data, pItem2->data);
-			break;
-
-		default:
-			equal = pItem1->data == pItem2->data;
-		}
-	}
-	else
-		equal = false;
-
-	return equal;
-}
-
-
-int LuaTable::JoinCurrentSession()
-{
-	if (this->Lua_GetItemType(1) != LT::nil)
-		this->Lua_GetUserdata(1);
 	return 0;
 }
 
-int LuaTable::JoinSessionFromCommandLine()
+const char* STRING_008e8504;
+
+int JoinSessionFromCommandLine(lua_State* L)
 {
-	this->Lua_ThrowIfIndexIsNotGivenType(1, LT::userdata_s);
-	LuaUserData* pUserData = this->Lua_GetUserdata(1);
+	luaL_checktype(L, 1, LUA_TUSERDATA);
+	void* pUserData = lua_touserdata(L, 1);
 	if (pUserData != NULL)
-		this->Lua_ReportErrorForReal(1);
-	// So: This indicates that the first item of the struct is a pointer to another struct, and the first item of that struct is a jmptable
-	(*((**pUserData)[4]))();
+		luaL_typerror(L, 1, STRING_008e8504);
+
+	// The 4th item in the vftable is a code** so it's either a struct with the first field being a jump table, or the jump table in the current struct contains pointers to pointers
+	// (*(pUserData->vftable_0x0[4]))();
 	return 0;
 }
 
-uint Lua_LongJump(LuaTable* table, void (*func)(LuaTable*, undefined4*), undefined4* scriptObject)
-{
-	jmp_buf local_48;
-	uint local_4c = table[1].next_0x8;
-	table[1].next_0x8 = (LuaItem*)&local_4c;
+// Functions that are called from Lua
+// The first item in the table is the input to functions, while outputs are added to the end of the table, almost like it's a print output or something.
 
-	// _setjmp3
-	// Internal CRT function. A new implementation of the setjmp function.
-	// Don't use this function in a C++ program. It's an intrinsic function that doesn't support C++.
-	// - Documentation
-	// I guess it's proof this wasn't written in C++
-	int iVar1 = _setjmp3(&local_48, 0, local_4c, local_48);
-	if (iVar1 == 0)
-		(*func)(table, scriptObject);
-
-	table[1].next_0x8 = (LuaItem*)local_4c;
-
-	return 0;
-}
-
-void Lua_ReturnFromLongJump(uint* param_2)
-{
-
-}
-
-// Functions that I imagine are called from Lua, given the strange procedure
-// The first item in the table is used as the input to functions, while outputs to functions are added to the end of the table, almost like it's a print output or something.
-
-LuaErrorCode len(LuaTable* table)
+int len(lua_State* L)
 {
 	UINT length;
-	table->Lua_GetStringItem_s(1, &length);
-	table->Lua_AddNumberPropertyFromInt(length);
-	return BB_OK;
+	luaL_checklstring(L, 1, &length);
+	lua_pushinteger(L, length);
+	return LUA_OK;
 }
 
-LuaErrorCode GetNumWStringLines(LuaTable* table)
+int GetNumWStringLines(lua_State* L)
 {
-	LuaTable* tableCopy = table;
-	wchar_t* in_wstring = table->Lua_GetStringItem(1, NULL);
+	lua_State* LCopy = L;
+	wchar_t* in_wstring = (wchar_t*)lua_tolstring(L, 1, NULL);
 
-	LuaTable* pLVar2 = (LuaTable*)1;
-	table = (LuaTable*)1;
+	int plVar2 = 1;
+	L = (lua_State*)1;
 	uint length = WString_GetLength(in_wstring);
 	if (length)
 	{
@@ -1438,76 +675,65 @@ LuaErrorCode GetNumWStringLines(LuaTable* table)
 		for (int i = 0; i < length; i++)
 		{
 			if (in_wstring[i] == L'\n')
-				pLVar2++;
+				plVar2++;
 
-			table = pLVar2;
+			L = (lua_State*)plVar2;
 		}
 	}
-	tableCopy->Lua_AddNumberPropertyFromFloat((float)(int)table);
-	return BB_OK;
+	lua_pushnumber(LCopy, (float)(int)L);
+	return LUA_OK;
 }
 
-LuaErrorCode ConvertToWString(LuaTable* table)
+int getplatform(lua_State* L)
 {
-
-	if (!table->Lua_IsItemAStringOrNumber(1))
-	{
-		table->Lua_ActuallyAddStringProperty(L"NIL STRING", WString_GetLength(L"NIL STRING") + 2);
-	}
-	else
-	{
-		wchar_t* pWVar2 = table->Lua_GetStringItem(1, NULL);
-		wchar_t* iVar3 = pWVar2 + 1;
-		do
-		{
-
-		}
-	}
+	lua_pushlstring(L, "PC", 2);
+	return LUA_OK;
 }
 
-LuaErrorCode getplatform(LuaTable* table)
+int StartKickVote(lua_State* L)
 {
-	table->Lua_ActuallyAddStringProperty("PC", 2);
-
-	return BB_OK;
-}
-
-LuaErrorCode StartKickVote(LuaTable* table)
-{
-	table->Lua_ThrowIfIndexIsNotGivenType(1, LT::userdata_s);
-	LuaUserData* pUserData = table->Lua_GetUserdata(1);
+	luaL_checktype(L, 1, LUA_TUSERDATA);
+	void* pUserData = lua_touserdata(L, 1);
 	if (pUserData == NULL)
-		table->Lua_ReportErrorForReal(1, LT::userdata_s);
+		luaL_typerror(L, 1, "userdata");
 
+	/*
 	int* piVar1 = *(int**)(pUserData->vftable);
-	pUserData = table->Lua_GetUserdata(2);
+	pUserData = lua_touserdata(L, 2);
 	int local_8 = *(int*)pUserData->vftable;
 
-	FUN_004f0f20(piVar1, &local_8);
+	//FUN_004f0f20(piVar1, &local_8);
+	*/
 
-	return BB_OK;
+	return LUA_OK;
 }
 
-LuaErrorCode deg(LuaTable* table)
+int deg(lua_State* L)
 {
-	LuaTable* unaff_ESI;
-	table->Lua_GetNumber_s(1, unaff_ESI);
+	float rad = luaL_checknumber(L, 1);
+
+	lua_pushnumber(L, rad * 57.29578f);
+
+	return LUA_OK;
 }
 
-// FormatMemoryCard will call this function, but given the lack of formatting going on I'd say that's probably unintentional.
-void FormatMemoryCardForRealMaybe(int param_1)
+// FormatMemoryCard will call this function, but given the lack of formatting going on I'd say that's unintentional.
+int FormatMemoryCardForRealMaybe(undefined* param_1)
 {
 	return param_1->unkn_0x4;
 }
 
-// Left-over from the PS2 version, it still calls a function but clearly it doesn't do any formatting anymore.
-LuaErrorCode FormatMemoryCard()
+
+// Left-over from the PS2 version, it still tries to call the formatting function, but it's been removed.
+// It still updates something in the settings, so maybe something strange will happen if this is triggered on the PC version?
+int FormatMemoryCard(lua_State* L)
 {
-	bbSaveDevice* save = SaveDeviceRelated_008e8410;
+	sGameSettings* pSettings = g_pGameSettings_008e8410;
 	FormatMemoryCardForRealMaybe();
-	save->field1088_0x44c = 7;
-	return BB_OK;
+	pSettings->field1088_0x44c = 7;
+	return 0;
 }
+
 
 BYTE byteArray_00652728[256] =
 {
@@ -1552,15 +778,12 @@ int FUN_005bb8a0(uint indexKinda)
 
 // Writes a section of the file to it's handle, given the buffer and desired bytes to write. Returns the number of bytes actually written for comparison.
 // Updates realFilePos and filePos to point after the written bytes.
-DWORD FileObject::FileObject_WriteFileToHandle(LPCVOID buffer, DWORD bytesToWrite)
+DWORD MWFileObject::WriteFileToHandle(LPCVOID buffer, DWORD bytesToWrite)
 {
-
 	DWORD bytesWritten;
 	DWORD totalBytesWritten = 0;
 	HANDLE hFile;
 	DWORD tempToWrite;
-
-
 
 	if (bytesToWrite != 0)
 	{
@@ -1568,7 +791,7 @@ DWORD FileObject::FileObject_WriteFileToHandle(LPCVOID buffer, DWORD bytesToWrit
 
 		for (int d = bytesToWrite; d != 0; d -= tempToWrite)
 		{
-			// Writes in 64 KB chunks unless what's left is less.
+			// Writes in 64 KB chunks
 			tempToWrite = 0xFFFF;
 			if (d < 0x10000)
 				tempToWrite = d;
@@ -1578,14 +801,15 @@ DWORD FileObject::FileObject_WriteFileToHandle(LPCVOID buffer, DWORD bytesToWrit
 			totalBytesWritten += bytesWritten;
 		}
 	}
+
 	// Advance the pointers
 	// I just noticed, it uses bytesToWrite instead of totalBytesWritten, so it'll skip too far if it couldn't write everything.
-	this->realFilePos = this->realFilePos + bytesToWrite;
-	this->filePos = this->filePos + bytesToWrite;
+	this->realFilePos += bytesToWrite;
+	this->filePos += bytesToWrite;
 	return totalBytesWritten;
 }
 
-void FileObject::FileObject_SetFilePointer(int newLoc)
+void MWFileObject::bbSetFilePointer(int newLoc)
 {
 	if (this->realFilePos != (char*)newLoc)
 	{
@@ -1596,41 +820,42 @@ void FileObject::FileObject_SetFilePointer(int newLoc)
 }
 
 // FileObject_New() is a more complicated version of FileObject_Create()
-FileObject* __fastcall FileObject_New(const char* filename_unaff_EDI, uint flags_unaff_EBX)
+MWFileObject* __fastcall FileObject_New(const char* filename_unaff_EDI, uint flags_unaff_EBX)
 {
-	FileObject* output = NULL;
+	MWFileObject* output = NULL;
 	// Checking if it's reading an existing file or not
 	if ((flags_unaff_EBX & 1) == 0)
 	{
-		FileObject* piVar2 = (FileObject*)malloc(sizeof(FileObject));
-		if (piVar2 != NULL)
+		MWFileObject* newFile = (MWFileObject*)malloc(sizeof(MWFileObject));
+		if (newFile != NULL)
 		{
-			piVar2->filePos = NULL;
-			piVar2->realFilePos = NULL;
-			piVar2->handle = NULL;
-			piVar2->filename1 = NULL;
-			piVar2->fileattributes = NULL;
+			newFile->filePos = NULL;
+			newFile->realFilePos = NULL;
+			newFile->handle = NULL;
+			newFile->filename1 = NULL;
+			newFile->fileattributes = NULL;
 			//piVar2->vtable = JMPTABLE_0067b6f8;
-			piVar2->usuallyNeg1 = -1;
-			output = piVar2;
+			newFile->usuallyNeg1 = -1;
+			output = newFile;
 		}
 		// It's outside the if statement, which will try to access output even when it's NULL.
-		output->FileObject_Create(filename_unaff_EDI, flags_unaff_EBX);
+		output->Create(filename_unaff_EDI, flags_unaff_EBX);
 	}
 	else
 	{
 		struct _stat result;
 		int iVar1 = _stat(filename_unaff_EDI, &result);
+
 		if (iVar1 == 0)
 		{
-			FileObject* pAVar2 = (FileObject*)malloc(sizeof(FileObject));
+			MWFileObject* pAVar2 = (MWFileObject*)malloc(sizeof(MWFileObject));
 			if (pAVar2 != NULL)
 			{
 				FileObject_ClearEAX(pAVar2);
 				output = pAVar2;
 			}
 			// They did it again
-			output->FileObject_Create(filename_unaff_EDI, flags_unaff_EBX);
+			output->Create(filename_unaff_EDI, flags_unaff_EBX);
 			void* pvStack_18;
 			output->size = pvStack_18;
 			return output;
@@ -1639,18 +864,18 @@ FileObject* __fastcall FileObject_New(const char* filename_unaff_EDI, uint flags
 	return output;
 }
 
-void FileObject::FileObject_Create(LPCSTR lpFilename, uint flags)
+void MWFileObject::Create(LPCSTR lpFilename, uint flags)
 {
 	DWORD desiredAccess = 0;
 	DWORD creationDisposition = 0;
-	bool bVar2 = (flags & 1) != 0;
-	if (bVar2)
+	bool bRead = flags & 1;
+	if (bRead)
 	{
 		desiredAccess = GENERIC_READ;
 		creationDisposition = OPEN_EXISTING;
 	}
-	DWORD shareMode = bVar2;
-	DWORD flagsAndAttributes = bVar2;
+	DWORD shareMode = bRead;
+	DWORD flagsAndAttributes = bRead;
 	if (flags & 2)
 	{
 		desiredAccess |= GENERIC_WRITE;
@@ -1661,16 +886,17 @@ void FileObject::FileObject_Create(LPCSTR lpFilename, uint flags)
 	HANDLE handle = CreateFileA(lpFilename, desiredAccess, shareMode, NULL, creationDisposition, flagsAndAttributes, NULL);
 	this->fileattributes = flags;
 	this->handle = handle;
-	if ((handle == NULL) && (FUNC_008da6f4 != NULL))
-		(*FUNC_008da6f4)();
+	//if ((handle == NULL) && (FUNC_008da6f4 != NULL))
+		//(*FUNC_008da6f4)();
 
 	return;
 }
 
+
 // If mode is 1, It'll just set the file pos with no fuss.
 // If mode is 2, It'll treat the file pos relative to the end.
 // If mode is 0, checks a flag in the attributes and if it's cleared, read from the file in, a way.
-void FileObject::FileObject_SetFilePos(int newPos, int mode)
+void MWFileObject::SetFilePos(int newPos, int mode)
 {
 	switch (mode)
 	{
@@ -1698,30 +924,30 @@ void FileObject::FileObject_SetFilePos(int newPos, int mode)
 	return;
 }
 
-void FileObject::FileObject_FlushBuffers()
+void MWFileObject::FlushBuffers()
 {
 	FlushFileBuffers(this->handle);
 }
 
 // This would make sense if the filePos was private, but it has to be public to be accessed by the FileObject_ClearEAX() function.
 // It might not be a C++ class anyways so did they go through the trouble of integrating public/private distinction in their own class?
-char* FileObject::FileObject_GetFilePosButLikeWhy()
+char* MWFileObject::GetFilePosButLikeWhy()
 {
 	return this->filePos;
 }
 
 
-bool FileObject::FileObject_IsFilePosBeyond()
+bool MWFileObject::IsFilePosBeyond()
 {
 	return ((int)this->filePos > 0) && (this->size <= this->filePos);
 }
 
-int FileObject::FileObject_GetSize()
+int MWFileObject::GetSize()
 {
 	return (this->size == (void*)-1) ? (int)this->filePos : (int)this->size;
 }
 
-void FileObject::FileObject_Clear()
+void MWFileObject::Clear()
 {
 	this->usuallyNeg1 = -1;
 	this->filePos = NULL;
@@ -1732,7 +958,7 @@ void FileObject::FileObject_Clear()
 	return;
 }
 
-void __fastcall FileObject::FileObject_Close()
+void __fastcall MWFileObject::Close()
 {
 	if (this->handle != NULL)
 	{
@@ -1742,7 +968,7 @@ void __fastcall FileObject::FileObject_Close()
 	return;
 }
 
-FileObject* FileObject::FileObject_ResetMaybe(int bFree)
+MWFileObject* MWFileObject::ResetMaybe(int bFree)
 {
 	//this->vtable = &JMPTABLE_0067b6f8;
 	if (this->handle != NULL)
@@ -1756,7 +982,7 @@ FileObject* FileObject::FileObject_ResetMaybe(int bFree)
 	return this;
 }
 
-void __fastcall FileObject_ClearEAX(FileObject* in_EAX)
+void __fastcall FileObject_ClearEAX(MWFileObject* in_EAX)
 {
 	//in_EAX->vtable = JMPTABLE_0067b6f8;
 	in_EAX->usuallyNeg1 = -1;
@@ -1768,9 +994,14 @@ void __fastcall FileObject_ClearEAX(FileObject* in_EAX)
 	return;
 }
 
+void MWFileObject::DoNothing()
+{
+	return;
+}
+
 
 void (*FUNC_008da6f4)();
-FileObject* PTR_008da72c;
+MWFileObject* PTR_008da72c;
 uint UINT_008da730;
 
 // My own addition to make reading this next function much easier.
@@ -1780,7 +1011,7 @@ uint UINT_008da730;
 #define ReadAsByte(buf, offset) (*(BYTE*)(&buf[offset]))
 #define ReadAsString(buf, offset) (&buf[offset])
 
-void OpenBFS(LPCSTR filename, YetAnotherFileObject* unaff_EDI)
+void OpenBFS(LPCSTR filename, register YetAnotherFileObject* unaff_EDI)
 {
 	int aiStack_10[2];
 	int iVar2;
@@ -1813,7 +1044,7 @@ void OpenBFS(LPCSTR filename, YetAnotherFileObject* unaff_EDI)
 	if ((int)bfsFile == -1)
 		CreateErrorMessageAndDie("Could not query file size for BFS archive: %s");
 
-	FileObject* pAVar4 = PTR_008da72c;
+	MWFileObject* pAVar4 = PTR_008da72c;
 	unaff_EDI->size_0x4 = (int)bfsFile;
 	//FUN_0059b60(PTR_008da72c, unaff_EDI, aiStack_10, 0, 0x10);
 
@@ -1902,7 +1133,7 @@ BYTE lpKeyState_008d7d60[0x40];
 BYTE lpKeyState_008d7e60[0x40];
 HHOOK HHOOK_008da738;
 
-
+HKL HKL_008d7c44;
 
 LRESULT Keyboard_HookProc(int code, WPARAM wParam, LPARAM lParam);
 
@@ -1911,8 +1142,8 @@ HOOKPROC nextHook = (HOOKPROC)Keyboard_HookProc;
 LRESULT KeyboardController::Keyboard_Hook(uint param_1)
 {
 	// Ghidra shows the STOSD.REP instruction as a for loop
-	__stosd(lpKeyState_008d7e60, 0, 0x40);
-	__stosd(lpKeyState_008d7d60, 0, 0x40);
+	__stosd((unsigned long*)lpKeyState_008d7e60, 0, 0x10);
+	__stosd((unsigned long*)lpKeyState_008d7d60, 0, 0x10);
 
 	if (HHOOK_008da738 == NULL)
 	{
@@ -1935,23 +1166,25 @@ LRESULT KeyboardController::Keyboard_Hook(uint param_1)
 		}
 	}
 
-	DAT_008d7c44 = GetKeyboardLayout(0);
+	HKL_008d7c44 = GetKeyboardLayout(0);
 
-	_stosd(UINT_008d7c48, 0, 0x40);
+	/*
+	__stosd(UINT_008d7c48, 0, 0x40);
 	DAT_008d7d58 = 0;
 	DAT_008da740 = 0;
 	this->field_0x12c = 1;
 	this->field_0x130 = 1;
-	int iVar1 = FUN_00553220();
+	*/
+	int iVar1 = 0;//FUN_00553220();
 	if (iVar1 == 0)
 	{
 		//this->vftable_0x0[17]();
-		FUN_00553360();
+		//FUN_00553360();
 	}
 	iVar1 = 0;
 	do
 	{
-		FUN_00553120();
+		//FUN_00553120();
 		iVar1++;
 	} while (iVar1 < 20);
 
@@ -1967,7 +1200,7 @@ LRESULT Keyboard_HookProc(int code, WPARAM wParam, LPARAM lParam)
 	if (code < 0)
 	{
 		CallNextHookEx(HHOOK_008da738, code, wParam, lParam);
-		return;
+		return 0;
 	}
 
 	uint wVirtKey = wParam & 0xFF;
@@ -1996,7 +1229,7 @@ LRESULT Keyboard_HookProc(int code, WPARAM wParam, LPARAM lParam)
 			if (((lParam & 0x40000000U) != 0) && (PTR_008e844c[5] == 0))
 			{
 				CallNextHookEx(HHOOK_008da738, code, wParam, lParam);
-				return;
+				return 0;
 			}
 
 			WCHAR convertedKey = 0;
@@ -2040,7 +1273,7 @@ LRESULT Keyboard_HookProc(int code, WPARAM wParam, LPARAM lParam)
 	}
 hookExit:
 	CallNextHookEx(HHOOK_008da738, code, wParam, lParam);
-	return;
+	return 0;
 }
 
 // Another function that looks suspicously like DoNotCallEver.
@@ -2053,7 +1286,7 @@ void* KeyboardController::Keyboard_Unhook(BYTE bFree)
 			UnhookWindowsHookEx(HHOOK_008da738);
 
 		HHOOK_008da738 = NULL;
-		DAT_008da73c = NULL;
+		//DAT_008da73c = NULL;
 		this->int_0x12c = 0;
 		this->byte_0x130 = 0;
 	}

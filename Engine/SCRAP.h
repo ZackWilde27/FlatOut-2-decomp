@@ -1,6 +1,9 @@
 #pragma once
 
 #include <stdio.h>
+#include <memory.h>
+#include <intrin.h>
+#pragma intrinsic(__stosd)
 #include <math.h>
 
 // WINMM.DLL
@@ -32,6 +35,21 @@
 #include <stdlib.h>
 #include <string>
 
+// Lua 5.1
+// I don't know the exact version that was used, but 5.1.5 can be downloaded from here.
+// https://www.lua.org/versions.html#5.1
+// It's from 2012 but it's the only version of 5.1 available.
+// According to 5.1.5's code there should be a full version string somewhere but there isn't one.
+#include "lua-5.1.5/src/lapi.h"
+#include "lua-5.1.5/src/lauxlib.h"
+#include "lua-5.1.5/src/lcode.h"
+#include "lua-5.1.5/src/ldebug.h"
+#include "lua-5.1.5/src/ldo.h"
+#include "lua-5.1.5/src/lfunc.h"
+#include "lua-5.1.5/src/lgc.h"
+#include "lua-5.1.5/src/llex.h"
+#include "lua-5.1.5/src/llimits.h"
+
 
 // Wait a minute, Microsoft already did this
 #define uint UINT
@@ -44,14 +62,13 @@
 // I didn't know that wide strings were unicode, but in my defence, if they are interchangable why is there both wchar_t and char16_t? both u"String" and L"String"?
 #define LPUSTR LPWSTR
 
-
-
 #define undefined1 unsigned char
 #define undefined2 unsigned short
 #define undefined4 unsigned int
 // I thought a long was 8 bytes, but that's not the case on Windows.
 // long and int are the same size? Why is it a 'long' then?
 #define undefined8 unsigned long long
+
 
 // Doesn't end there, putting aside the missed opportunity to call it a double double, it turns out a long double is the same size as a double.
 // I couldn't find much information about what ghidra's float10 actually is.
@@ -63,39 +80,30 @@
 
 
 void CreateErrorMessageAndDie(const char* message, ...);
-void* DoNotCallEver(void* jmpTable, int bFree);
 
-
-
-// It used to be called neverReferencedAgain, because this next function checks if it's 0,
-// and that's the only time it's ever referenced.
-// Cheat Engine says this value is initialized to 0, so it always overrides.
-int g_slashOverride = 0;
-
-
-int SlashConvertString(uchar* in_string, int mode, uchar* out_string);
+// Formerly SlashConvertString
+int NormalizeFilePath(uchar* in_string, int mode, uchar* out_string);
 
 int String_Compare(char* string1, char* string2);
-
 int String_Compare_s(char* string1, char* string2, int maxLength);
-
 char String_CompareEnd(char* out_string, char* in_string, int length);
 
 int String_GetLength(const char* in_string);
 
 char* String_SimpleCopy(char* out_string, const char* in_string);
-
 char* String_CopySubstring(char* out_string, char* in_string, int length);
-
 char* String_Append(char* out_string, const char* in_string);
-
 char* String_AppendSubstring(char* out_string, char* in_string, int length);
-
 void __cdecl ComplicatedCopyString(char** out_string, uint param_2, const char* in_string);
-
 void static CopyStringToPointerToString(char** out_string, const char* in_string);
 
 char Char_ToLowercase(char theChar);
+
+int WString_GetLength(wchar_t* in_wstring);
+
+wchar_t* WString_SimpleCopy(wchar_t* Dst, wchar_t* Src);
+
+
 
 const char* StringList_00681888[256] =
 {
@@ -139,243 +147,79 @@ bool String_CompareAsIntegers(int* ints1, int* ints2);
 bool StringToNum(char* stringFloat, float* outFloat);
 
 
-
-
-// My own addition, It's leaning a bit towards inaccuracy, but it'll make it much easier to read the code
-// The lua table stores items as pairs of void*, where the second pointer is actually an int describing the type
-// My guess is that because an int is the same size, they could just cast with no issues.
-// I originally put it as a DWORD but I'm going to keep it 32-bit so I can properly understand things before going back and making 64-bit changes
-// In FlatOut 1, The LuaItem is reversed, the first pointer is type, the second is the data
-struct LuaItem
+struct TableItemStructThing
 {
-	void* data;
-	int type;
+	// 6 undefined bytes at offset 0x0
+	BYTE byte_0x6;
 };
 
-// And here's the table of lua types
-// The first and second userdata are very different, probably have the same name for security
-// technically -1 has an entry, it'll return "no value" when calling Lua_StringTypeFromInt
-const char* LuaTypes_0065284c[] =
-{
-	"nil" // data is not defined, could be anything
-	"boolean", // boolean inside data
-	"userdata", // I think it's just a char*, still need to confirm that
-	"number", // float inside data, so it's as percise as the word size is large.
-	"string", // pointer to struct containing a wide string.
-	"table", // I'm still confirming whether this is a LuaTable or some other table
-	"function", // data is the pointer to the function
-	"userdata", // data is a struct, still haven't figured it out yet
-	"thread",
-	"proto",
-	"upval"
-};
-
-// I'll make an enum so I can use the type names instead of numbers
-enum LT
-{
-	nil,
-	boolean,
-	userdata,
-	number,
-	string,
-	table,
-	function,
-	userdata_s,
-	thread,
-	proto,
-	upval
-};
-
-// This item is never used, it represents a null LuaItem.
-// This had to be done because data is checked
-LuaItem LuaItem_None_0065271c;
-
-// astruct_157
-// I thought it was a generic Lua Data struct but it turns out it's only used on strings and maybe userdata. Numbers and booleans are just stored as is.
-struct LuaString
-{
-	char* (**jmptable_0x0)(void);
-	// 7 undefined bytes at offset 0x0
-	int int_0x4;
-	BYTE byte_0x7;
-	// 4 undefined bytes at offset 0x8
-	UINT length_0xc;
-	wchar_t* theString_0x10;
-};
-
-struct LuaUserData
-{
-	// The parameter to the function is another LuaUserData's vftable
-	void (**vftable)(void (***)());
-	// So the parameter is a function whose first parameter is a function whose first parameter is a function whose first parameter...
-	//void (**vftable)(void (**)(void (**)(void (**)(void (**)(void (**)(...))))));
-	undefined4 unkn_0x4;
-	undefined4 unkn_0x8;
-	char* string_0x10;
-};
-
-// I think this is lua's userdata_s struct, or maybe it's the other way around and this is the string
-struct UnknownStruct
-{
-	// 20 undefined bytes at offset 0x0
-	char char_0x15;
-	// 29 undefined bytes at offset 0x16
-	uint uint_0x40;
-	int int_0x44;
-	uint uint_0x4c;
-	int int_0x50;
-	int int_0x54;
-};
 
 // LuaTable's StructThing
 struct astruct_169
 {
 	void* end_0x0; // Pointer to the last byte of itself, don't know why just yet.
 	void* unkn_0x4;
-	LuaTable* table_0x8;
+	lua_State* state_0x8;
+};
+
+struct LuaStateStruct
+{
+	lua_State* L_0x0;
+	int index_0x4;
+};
+
+struct LuaStateStruct2
+{
+	char* nameMaybe_0x0;
+	lua_State* L_0x4;
+	void* unkn_0x8;
 };
 
 
 // In the original code these are structs that have a function table as their first property, but to make things easier I changed them to C++ classes.
 
-class LuaTable
-{
-public:
-	// 8 undefined bytes at 0x0
-	BYTE field7_0x6;
-	BYTE byte_0x7;
-	LuaItem* next_0x8; // Stores a pointer to the next blank item in table_0xc, for adding new ones
-	LuaItem* table_0xc; // The current table
-	UnknownStruct* field10_0x10;
-	int** field11_0x14;
-	LuaItem* endOfTable_0x1c;
-	// 4 undefined bytes at 0x18
-	int field17_0x20;
-	// 24 undefined bytes at offset 0x24
-	short bDebug_0x34; // Flag wether or not to enable debug logging.
-	// 16 undefined bytes at 0x36
-	LuaItem* table_0x44; // Some other table, maybe it's the main one or something?
-	// 4 undefined bytes at 0x48
-	int field61_0x4c;
-	int field62_0x50;
+// Turns out, I spent a ton of time decompiling a lua struct I could have looked up
+// At the very least it's a lot of code that I don't have to decompile anymore.
 
-	uint AttemptToYield(int param_2);
-
-	void Lua_AddNilProperty();
-	void Lua_ActuallyAddStringProperty(const char* in_wstring, size_t length);
-	void Lua_AddStringProperty(const char* in_string);
-	void Lua_AddStringProperty2(char* in_string);
-	void Lua_AddBoolProperty(bool in_bool);
-	void Lua_AddUserDataProperty(void* userdata);
-
-	void Lua_AddNumberPropertyFromInt(int in_number);
-	void Lua_AddNumberPropertyFromFloat(float in_number);
-	void Lua_Add3ItemsAndCopy1(LuaItem* out_pItem1, LuaItem* pItem1, LuaItem* pItem2, LuaItem* pItem3);
-	void CopyItemFromTableItem(int tableIndex, int itemIndex);
-
-	LuaItem* Lua_GetItem(int index);
-	int Lua_GetItemType(int index);
-	void Lua_DuplicateItem(int index);
-
-	void Lua_RemoveItem(int index);
-	void Lua_InsertLastItem(int index);
-
-	void Lua_SeekNextPtr(int newIndex);
-
-	bool Lua_StringFromNumber(LuaItem* pItem);
-
-	bool Lua_IsNumber(int index);
-
-	BOOL Lua_IsNumber_s(int index, LuaTable* otherTable);
-
-	bool Lua_IsUserData(int index);
-
-	LuaItem* Lua_NumberFromString(LuaItem* pStringItem, LuaItem* pNewNumberItem);
-
-	float Lua_GetNumberAsFloat(int index);
-	long Lua_GetNumberAsInt(int index);
-	LuaItem* Lua_GetNumberItem(int index);
-	bool Lua_GetBool(int index);
-	void* Lua_GetThread(int index);
-	LuaUserData* Lua_GetUserdata(int index);
-
-	wchar_t* Lua_GetStringItem(int index, UINT* out_length);
-	wchar_t* Lua_GetStringItem_s(int index, UINT* out_length);
-
-	char* Lua_GetItemStringLength(int index);
-
-	const char* Lua_StringTypeFromInt(int type);
-
-	
-
-	void Lua_gettable(LuaItem* pItem, LuaItem* pLastItem1, LuaItem* pNewItem);
-
-	int Lua_GetTableLength();
-
-	bool Lua_AddFunctionWithANameMatchingTheSecondItemInTheTable();
-
-	bool Lua_IsItemAStringOrNumber(int index);
-
-	bool Lua_ItemsEqual_s(int index1, int index2);
-
-	void Lua_ThrowIfIndexIsNotGivenType(int index, int expectedType);
-	void Lua_ReportError(int index, int expectedType);
-	void Lua_ReportErrorForReal(int index, int expectedType);
-
-	int Lua_Printf(char* format, ...);
-
-	// Gameplay functions?
-	uint Lua_KickPlayer();
-	int JoinCurrentSession();
-	int JoinSessionFromCommandLine();
-
-	void StructThing(astruct_169* tableStruct);
-};
-
-bool Lua_ItemsEqual(LuaItem* pItem1, LuaItem* pItem2);
-
-bool __fastcall Lua_IsFunction(LuaTable** in_EAX);
-
-uint Lua_LongJump(void (*func)(LuaTable*, undefined4*), undefined4* scriptObject);
-void Lua_ReturnFromLongJump(uint* param_2);
-
-
-
-// Functions that I'm pretty sure are called from Lua
+// Functions that are called from lua
 
 // Error Codes
-typedef UINT LuaErrorCode;
-#define BB_OK 1
+// Lua does not define an ok macro 
+#define LUA_OK 0
 
-LuaErrorCode len(LuaTable* table);
-LuaErrorCode GetNumWStringLines(LuaTable* table);
-LuaErrorCode ConvertToWString(LuaTable* table);
-LuaErrorCode getplatform(LuaTable* table);
-LuaErrorCode StartKickVote(LuaTable* table);
-LuaErrorCode deg(LuaTable* table);
-LuaErrorCode FormatMemoryCard();
+int len(lua_State* L);
+int GetNumWStringLines(lua_State* L);
+int getplatform(lua_State* L);
+int StartKickVote(lua_State* L);
+int deg(lua_State* L);
+int FormatMemoryCard(lua_State* L);
+int Lua_KickPlayer(lua_State* L);
+int JoinCurrentSession(lua_State* L);
+int JoinSessionFromCommandLine(lua_State* L);
+
 
 // This jump table thing is making me think it's not a class but like a bugbear-made method system. But maybe that's just how classes are implemented in machine code and Ghidra is right?
 /*
 void (*JMPTABLE_0067b6f8[])() = {
-	FileObject_Close2,
-	FileObject_NotSureYet2,
-	FileObject_WriteFileToHandle,
-	FileObject_Create,
-	FileObject_Close,
-	FileObject_AddToFilePos,
-	FileObject_IsFilePosValid,
-	FileObject_GetSize,
-	FileObject_GetFilePosButLikeWhy,
-	FileObject_FlushBuffers,
+	FileObject::Close2,
+	FileObject::NotSureYet2,
+	FileObject::WriteFileToHandle,
+	FileObject::Create,
+	FileObject::Close,
+	FileObject::AddToFilePos,
+	FileObject::IsFilePosValid,
+	FileObject::GetSize,
+	FileObject::GetFilePosButLikeWhy,
+	FileObject::FlushBuffers,
 };
 */
 
-// Credit to mrwonko on GitHub for their file object reverse engineering
-// AutoClass 25
-class FileObject {
+// Thanks to mrwonko on GitHub for their file object reverse engineering
+// There's more than one file object, so this one is the MrWonkoFileObject
+class MWFileObject
+{
 public:
-	void (*vtable)();
+	void (**vtable)();
 	// Array of functions, methods if you will. unused in my implementation because I made it a class instead
 
 	char buffer[0x4000]; // 0x4
@@ -394,34 +238,47 @@ public:
 	char* filename2; // 0x4020
 	// Two different filename properties, I'm thinking maybe it's for objects that need to load both a model and texture file?
 
+	DWORD WriteFileToHandle(LPCVOID buffer, DWORD bytesToWrite);
 
-	DWORD FileObject_WriteFileToHandle(LPCVOID buffer, DWORD bytesToWrite);
+	void bbSetFilePointer(int newLoc);
 
-	void FileObject_SetFilePointer(int newLoc);
+	void Create(LPCSTR lpFilename, uint flags);
 
-	void FileObject_Create(LPCSTR lpFilename, uint flags);
+	void SetFilePos(int newPos, int mode);
 
-	void FileObject_SetFilePos(int newPos, int mode);
+	void FlushBuffers();
 
-	void FileObject_FlushBuffers();
+	char* GetFilePosButLikeWhy();
 
-	char* FileObject_GetFilePosButLikeWhy();
+	bool IsFilePosBeyond();
 
-	bool FileObject_IsFilePosBeyond();
+	int GetSize();
 
-	int FileObject_GetSize();
+	void Clear();
 
-	void FileObject_Clear();
+	void __fastcall Close();
 
-	void __fastcall FileObject_Close();
+	void DoNothing();
 
-	FileObject* FileObject_ResetMaybe(int bFree);
+	MWFileObject* ResetMaybe(int bFree);
 };
 
-FileObject* __fastcall FileObject_New(const char* filename_unaff_EDI, uint flags_unaff_EBX);
-void __fastcall FileObject_ClearEAX(FileObject* in_EAX);
+MWFileObject* __fastcall FileObject_New(const char* filename_unaff_EDI, uint flags_unaff_EBX);
+void __fastcall FileObject_ClearEAX(MWFileObject* in_EAX);
 
+// there's another class based off the original one.
+class MW2FileObject : MWFileObject
+{
+private:
+	undefined4 unkn_0x4028;
+	undefined4 unkn_0x402c;
+	undefined4 unkn_0x4030;
+	// 0x72 undefined bytes at offset 0x4034
+	undefined4 unkn_0x407c;
+	undefined4 unkn_0x4084;
 
+public:
+};
 
 
 // Used for OpenBFS
@@ -429,7 +286,7 @@ struct YetAnotherFileObject
 {
 	HANDLE handle_0x0;
 	int size_0x4;
-
+	// 516 undefined bytes at offset 0x8
 	char* string_0x20c;
 	int sizeAgain_0x210;
 	int int_0x214;
@@ -438,7 +295,161 @@ struct YetAnotherFileObject
 	int int_0x220;
 };
 
-void OpenBFS(LPCSTR filename, YetAnotherFileObject* unaff_EDI);
+
+
+void OpenBFS(LPCSTR filename, register YetAnotherFileObject* unaff_EDI);
+
+
+// Thanks to Sewer56 on GitHub for figuring out these structs.
+
+struct sRGBA
+{
+	char b, g, r, a;
+};
+
+struct Vector3_pad
+{
+	float x, y, z, pad;
+};
+
+struct Quaternion
+{
+	float y, z, x, w;
+};
+
+struct Matrix33
+{
+	Vector3_pad right;
+	Vector3_pad up;
+	Vector3_pad at;
+};
+
+struct sVehicle
+{
+	// 120 undefined bytes at offset 0x0
+	char* m_sFolderPath;
+	// 16 undefined bytes at offset 0x7c
+	uint32_t m_nFolderPathLength;
+	// 288 undefined bytes at offset 0x90
+	Matrix33 m_mMatrix;
+	Vector3_pad m_vPosition;
+	// 128 undefined bytes at offset 0x1f0
+	Quaternion m_qQuaternion;
+	Vector3_pad m_vVelocity;
+	Vector3_pad m_vRotationVelocity;
+	// 812 undefined bytes at offset 0x2a0
+	float m_fNitro;
+	// 5824 undefined bytes at offset 0x5d0
+	uint32_t m_nTireTextureID;
+	uint32_t m_nTireModelID;
+	// 8 undefined bytes at offset 0x1c98
+	uint32_t m_nDriverHandsID;
+	// 3228 undefined bytes at offset 0x1ca4
+	uint32_t* m_pShadowTexture;
+	// 364 undefined bytes at offset 0x2944
+	uint32_t m_nRagdollState;
+	// 6880 undefined bytes at offset 0x2ab4
+	uint32_t* m_pSkinDamageTexture;
+	uint32_t* m_pLightsDamagedTexture;
+	uint32_t* m_pLightsGlowTexture;
+	uint32_t* m_pLightsGlowLitTexture;
+	// 152 undefined bytes at offset 0x45a4
+	Player* m_pPlayer;
+	// 9312 undefined bytes at offset 0x4640
+	float m_fDamage;
+	// 36 undefined bytes at offset 0x6aa4
+	bool m_bGodMode;
+	//
+};
+
+class Player
+{
+private:
+	void (**m_pVFT_0x0)();
+	// 12 undefined bytes at offset 0x4
+	undefined4 unkn_0x10, unkn_0x14, unkn_0x18;
+	// 16 undefined bytes at offset 0x1c
+	undefined2 unkn_0x2c;
+	// 644 undefined bytes at offset 0x2e
+	undefined4 unkn_0x2b0, unkn_0x2b4;
+	// 28 undefined bytes at offset 0x2b8
+	sRGBA m_nBlipColor_0x2d0;
+	int int_0x2d4;
+	undefined4 unkn_0x2d8;
+	// 100 undefined bytes at offset 0x2dc
+	sVehicle* m_pVehicle_0x33c;
+	uint32_t m_nCarID_0x340;
+	uint32_t m_nSkin_0x344;
+	// 4 undefined bytes at offset 0x348
+	uint32_t m_bDriverFemale_0x34c;
+	uint32_t m_nDriverSkin_0x350;
+	// 20 undefined bytes at offset 0x354
+	uint32_t m_nPlayerId_0x368;
+	uint32_t m_nFlags_0x36c;
+	// 16 undefined bytes at offset 0x370
+	uint32_t m_bDisableControlAndReset_0x380;
+	// 168 undefined bytes at offset 0x384
+	Vector3_pad m_vPosition_0x428;
+	// 116 undefined bytes at offset 0x42c
+	float m_fReadOnlyDamage_0x49c;
+	// 484 undefined bytes at offset 0x4a0
+	float m_fSteerAngle_0x684;
+	float m_fGasPedal_0x688;
+	float m_fBrakePedal_0x68c;
+
+public:
+
+};
+
+
+// PropertyDb
+
+class PropertyDb
+{
+private:
+	void (**vftable_0x0)();
+
+public:
+	PropertyDb* Destructor(int bDestruct); // "Real" destructor, so that the error does not show when exiting the game normally.
+	PropertyDb* DoNotCallEver(int bDestruct); // Destructor included in the function tables, puts up the error message to catch bugs
+};
+
+struct PlayerProfile
+{
+	// 3636 undefined bytes at offset 0x0
+	wchar_t m_wsPlayerName_0xe34[16];
+};
+
+struct sPlayerArray
+{
+	Player* m_aPlayers[8];
+};
+
+struct PlayerHost
+{
+	void (**vftable_0x0)();
+	// 16 undefined bytes at offset 0x4
+	sPlayerArray* m_pPlayerArray_0x14;
+	// 2416 undefined bytes at offset 0x18
+	uint32_t m_nNumCars_0x988;
+	// 130,784 undefined bytes at offset 0x98c
+	uint32_t m_nLevelID_0x2086c;
+};
+
+struct sGameSettings
+{
+	// 1152 undefined bytes at offset 0x0
+	uint32_t m_nLevelID_0x480;
+	// 4 undefined bytes at offset 0x484
+	uint32_t m_nNumLaps_0x488;
+	// 1324 undefined bytes at offset 0x48c
+	PlayerHost* m_pHost_0x9b8;
+	// 80 undefined bytes at offset 0x9bc
+	BOOL m_bStarted_0xa0c;
+	// 1488 undefined bytes at offset 0xa10
+	PlayerProfile m_pPlayerProfile_0xfe0;
+};
+
 
 // INPUT
 
