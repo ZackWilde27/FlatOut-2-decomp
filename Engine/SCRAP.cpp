@@ -10,9 +10,7 @@
 // SCRAP it is.
 #include "SCRAP.h"
 
-// Code will be moved here when I find the same functions, structs, or classes in the other games, or when it depends on functions, structs, or classes already in here.
 // It's extremely similar to 1 and UC's ROMU but there are enough changes, especially in the locations of things that it would make more sense to re-write it to match each game.
-
 
 // This build is dated September 20th, 2004, which is a couple months before FlatOut 1 released.
 // I checked, and they forgot to update the string, unless they considered the changes to be that small.
@@ -114,7 +112,6 @@ int NormalizeFilePath(uchar* in_string, int mode, uchar* out_string)
 				else if (currentChar == '\\')
 					currentChar = '/';
 			}
-				
 
 			// Converting to lowercase
 			lenOfData = isupper(currentChar);
@@ -316,7 +313,7 @@ bool String_CompareAsIntegers(int* ints1, int* ints2)
 
 // StringToNum
 // Converts the string into a float, unless it ends with an x or X character,
-// then it will treated as a hex string
+// then it will be treated as a hex string
 // Returns whether or not the given string ended with a null.
 bool StringToNum(char* stringFloat, float* outFloat)
 {
@@ -346,79 +343,77 @@ bool StringToNum(char* stringFloat, float* outFloat)
 	return nullTerminated;
 }
 
-// This is apparently strchr(), which makes it's oddities even more confusing.
-static char* String_IndexOfAlmost(char* string, char theChar)
+BOOL StrStrIsh(char* string, char* stringToFind, char* param_3, int iterations)
 {
-	// This function has 3 stages:
-	// The first stage is a strange indexOf where it only checks a few characters based on the location of the string in memory.
-	// The second stage makes no sense to me, it's both heavily obfuscated and probably needs more context.
-	// The third stage is a standard indexOf, but it only checks 4 characters
-	DWORD parityish = (DWORD)string & 3;
-	while (parityish != 0)
+	char firstLetter = *stringToFind;
+
+	char* ptr = strstr(string, stringToFind);
+	if (!ptr)
+		return FALSE;
+
+	char ch;
+	char* tempPtr = stringToFind + 1;
+	do
 	{
-		if (*string == theChar)
-			return string;
+		ch = *stringToFind;
+		stringToFind++;
+	} while (ch);
 
-		if (*string == NULL)
-			return NULL;
-
-		string++;
-		parityish = (DWORD)string & 3;
+	int i = 0;
+	if ((iterations - 1) > 0)
+	{
+		char* tempPtr2 = param_3;
+		do
+		{
+			ch = tempPtr2[(int)(ptr + (int)(stringToFind + (-(int)param_3 - (int)tempPtr)))];
+			if (ch == NULL || ch == firstLetter) break;
+			
+			i++;
+			*tempPtr2 = ch;
+			tempPtr2++;
+		} while (i < (iterations - 1));
 	}
 
-
-	uint uVar1, uVar3, uVar4;
-	char* pcVar5;
-	char tempChar;
-	while (true)
-	{
-		while (true)
-		{
-			// What is even going on in this first loop
-			uVar1 = *(uint*)string;
-			// Checks if the string has 4 of theChar in a row
-			uVar4 = uVar1 ^ (theChar << 24 | theChar << 16 | theChar << 8 | theChar);
-
-			// (x XOR y XOR x) gives you y. This could have just been 0x7EFEFEFE
-			//uVar3 = uVar1 ^ ((uint)-1) ^ uVar1 + 0x7EFEFEFF;
-			uVar3 = 0x7EFEFEFE;
-
-			pcVar5 = string + 4;
-
-			// Same thing here, it's just 0x7EFEFEFE again
-			//if ((uVar4 ^ ((uint)-1) ^ uVar4 + 0x7EFEFEFF) & 0x81010100) break;
-			// Considering that was the only break, is it possible to reach the third stage?
-			if (false) break;
-
-			string = pcVar5;
-			if (uVar3 & 0x81010100)
-			{
-				if (uVar3 & 0x1010100)
-					return NULL;
-
-				if (uVar1 + 0x7EFEFEFF & 0x80000000)
-					return NULL;
-			}	
-		}
-
-		// Changed this to a loop
-		for (uVar1 = 0; uVar1 < 4; uVar1++)
-		{
-			if (string[uVar1] == theChar)
-				return string + uVar1;
-
-			if (string[uVar1] == NULL)
-				return NULL;
-		}
-
-		string = pcVar5;
-	}
-
-	// Considering the outer while loop doesn't have any breaks, I don't think it's possible to reach here.
-	return NULL;
+	param_3[i] = NULL;
+	return TRUE;
 }
 
+#define BYTE_STRING_LENGTH 32
+// The buffer has a section at the start that is not changed by BytesToString,
+// It's much larger than just a 0x would be, so maybe it's padded with zeros, like 0x0000000
+char byteString[BYTE_STRING_LENGTH];
 
+char* __fastcall BytesToString(BYTE* buffer)
+{
+	byteString[BYTE_STRING_LENGTH] = NULL;
+	BYTE* startPtr = buffer + 1;
+	BYTE* endPtr = (BYTE*)byteString + (BYTE_STRING_LENGTH - 2);
+
+	BYTE b1;
+	BYTE b2;
+
+	int i = 4;
+	do
+	{
+		b1 = startPtr[-1];
+		endPtr[1] = "0123456789abcdef"[b1 & 0xF];
+		endPtr[0] = "0123456789abcdef"[b1 >> 4];
+		b2 = startPtr[0];
+		endPtr[-1] = "0123456789abcdef"[b2 & 0xF];
+		endPtr[-2] = "0123456789abcdef"[b2 >> 4];
+		b1 = startPtr[1];
+		endPtr[-3] = "0123456789abcdef"[b1 & 0xF];
+		endPtr[-4] = "0123456789abcdef"[b1 >> 4];
+		b2 = startPtr[2];
+		endPtr[-5] = "0123456789abcdef"[b2 & 0xF];
+		endPtr[-6] = "0123456789abcdef"[b2 >> 4];
+
+		startPtr += 4;
+		endPtr -= 8;
+
+	} while (--i);
+	return byteString;
+}
 
 int WString_GetLength(const wchar_t* in_wstring)
 {
@@ -476,6 +471,11 @@ void CreateErrorMessageAndDie(const char* message, ...)
 	sprintf(body, "%s", temp);
 	MessageBoxA(NULL, (LPCSTR)body, "Fatal error", MB_ICONERROR);
 	ExitProcess(0);
+}
+
+void CaptionlessTaskModalMessageBox(LPCSTR lpText)
+{
+	MessageBoxA(NULL, lpText, NULL, MB_TASKMODAL | MB_ICONWARNING);
 }
 
 
@@ -543,8 +543,7 @@ PropertyDb* PropertyDb::Destructor(int bDestruct)
 // RR: Change 0x00C8C428 to  0x006E2CE0 while the intro is playing and it'll crash before the title is shown.
 
 // This function is under AutoClass8, it doesn't show up in Ghidra's Functions tree for some reason.
-// DoNotCallEver is the destructor for PropertyDb. It tells you not to call it for obvious reasons.
-// I do wonder though, why not just put an empty function there? I guess it was to catch more bugs in development.
+// I guess their method system requires it to have a destructor, but they didn't actually want that.
 PropertyDb* PropertyDb::DoNotCallEver(int bFree)
 {
 	// Seems like a default value maybe.
@@ -568,24 +567,150 @@ PropertyDb* PropertyDb::DoNotCallEver(int bFree)
 //
 /////////////////////////////////////////////////
 
-// Thanks to Sewer56 for helping me get their disassembly opening
+// Thanks to Sewer56 for helping me get their disassembly opening (why did hexrays stop offering the 32-bit version of IDA?)
 
-uint __fastcall GetScriptParameterInt(LuaStateStruct* lss, int unaff_ESI)
+int DEBUGLOG(lua_State* L)
 {
-	int type = lua_type(lss->L_0x0, lss->index_0x4);
-	if (type == LUA_TBOOLEAN)
-		return lua_toboolean(lss->L_0x0, lss->index_0x4);
+	return 0;
+}
 
-	float data = lua_tonumber(lss->L_0x0, lss->index_0x4);
+uchar UCHAR_00h_0069c911 = NULL;
+CRITICAL_SECTION criticalSection_0069c8f4;
+
+void* AllocateInCriticalSection(int size)
+{
+	if (UCHAR_00h_0069c911)
+		EnterCriticalSection(&criticalSection_0069c8f4);
+
+	void* ptr = malloc(size);//IsThatACustomMadeMalloc(size);
+
+	if (UCHAR_00h_0069c911)
+		LeaveCriticalSection(&criticalSection_0069c8f4);
+
+	return ptr;
+}
+
+// It would make sense for this to be a realloc, but the new size isn't given
+void* ReAllocateInCriticalSection(void* block)
+{
+	if (UCHAR_00h_0069c911)
+		EnterCriticalSection(&criticalSection_0069c8f4);
+
+	void* ptr = NULL;// IsThatACustomMadeRealloc(PTR_PTR_FUN_0069c8f0, block);
+
+	if (UCHAR_00h_0069c911)
+		LeaveCriticalSection(&criticalSection_0069c8f4);
+
+	return ptr;
+}
+
+// The most basic allocator possible (to get an idea what bugbear's version is doing)
+/*
+void* basic_lua_allocator(void* ud, void* block, int osize, int nsize)
+{
+	if (!nsize)
+	{
+		free(block);
+		return NULL;
+	}
+
+	// Note that realloc turns into a malloc if block is NULL, which is a requirement for the allocator.
+	return realloc(block, nsize);
+}
+*/
+
+void* bugbear_lua_allocator(void* ud, void* block, int osize, int nsize)
+{
+	void* newBlock;
+
+	lua_State* L = *(lua_State**)ud;
+	if (!nsize)
+	{
+		if (!block)
+			return NULL;
+
+		newBlock = NULL;
+	}
+	else
+	{
+		if (nsize > 0xFFFFFFFC)
+		{
+			luaG_runerror(L, "memory allocation error: block too big");
+			return block;
+		}
+
+		if (!block)
+			newBlock = AllocateInCriticalSection(nsize);
+		else
+			newBlock = ReAllocateInCriticalSection(block);
+
+		if (!newBlock)
+		{
+			if (L)
+				luaD_throw(L, 4);
+
+			return NULL;
+		}
+	}
+
+	return newBlock;
+}
+
+int __fastcall GetScriptParameterInt(LuaStateStruct* lss_EAX)
+{
+	int type = lua_type(lss_EAX->L_0x0, lss_EAX->index_0x4);
+	if (type == LUA_TBOOLEAN)
+		return lua_toboolean(lss_EAX->L_0x0, lss_EAX->index_0x4);
+
+	lua_Number data = lua_tonumber(lss_EAX->L_0x0, lss_EAX->index_0x4);
 
 	// Some intense bit manipulation is about to happen
+	/*
 	uint intForm = *(uint*)&data;
 	type = intForm >> 23;
-	type &= 0xFF;
-	type -= 0x7F;
+	type &= 0xFFU;
+	type -= 127;
 
 	// What
-	//return (((intForm | 0xFF800000) << 8) >> (0x1F - (uchar)type & 0x1F) ^ intForm >> 31) - intForm >> 31 & ~(type >> 31);
+	return (((intForm | 0xFF800000) << 8) >> (0x1F - (uchar)type & 0x1F) ^ intForm >> 31) - intForm >> 31 & ~(type >> 31);
+	*/
+
+	// I did some testing to figure out what that does, and I'm still not sure
+	// In the version I wrote above, I read the float as an integer with no conversion, since it looks like that in the assembly, but the ghidra code suggests there's a conversion.
+
+	// As written above it works like this
+	return data >= 1.0f && !isinf(data);
+
+	// If I copy and paste the p-code directly from Ghidra it works like this
+	return data >= 0.0f ? 0 : -1;
+
+	// I don't think either of those are right, this function is treated like it returns a regular integer
+	// I think it would make the most sense if it was doing this
+	return (int)data;
+}
+
+BYTE* unmakemask(UINT mask, BYTE* out_result)
+{
+	bool bitSet = mask & 1;
+	if (bitSet)
+		out_result[0] = 99;
+
+	uint i = (uint)bitSet;
+
+	if (mask & 2)
+	{
+		out_result[i] = 0x72;
+		i++;
+	}
+		
+	if (mask & 4)
+	{
+		out_result[i++] = 0x6c;
+		i++;
+	}
+
+	out_result[i] = 0;
+	return out_result;
 }
 
 void __fastcall Lua_PadTableIfNeeded(int newLength_EAX, lua_State** unaff_EDI)
@@ -600,16 +725,18 @@ void __fastcall Lua_PadTableIfNeeded(int newLength_EAX, lua_State** unaff_EDI)
 	}
 }
 
+// Functions that are called from Lua
+
 int Lua_KickPlayer(lua_State* L)
 {
 	luaL_checktype(L, 1, LUA_TUSERDATA);
 
 	void* pUserData = lua_touserdata(L, 1);
 	if (pUserData == NULL)
-		// a type rror? a typ error?
-		luaL_typerror(L, 1, LUA_TUSERDATA);
+		luaL_typerror(L, 1, "SessionClass");
 
 	// Function pointers have nothing on function pointers inside function pointers
+	/*
 	void (**vftable1)(void(***)()) = pUserData->vftable;
 
 	// This one is not checked to see if it's null
@@ -618,6 +745,7 @@ int Lua_KickPlayer(lua_State* L)
 
 	undefined4 local_4 = pUserData->unkn_0x4;
 	vftable1[12](&vftable2);
+	*/
 }
 
 void StructThing(lua_State* self, astruct_169* tableStruct)
@@ -626,7 +754,6 @@ void StructThing(lua_State* self, astruct_169* tableStruct)
 	tableStruct->unkn_0x4 = NULL;
 	tableStruct->state_0x8 = self;
 }
-
 
 int JoinCurrentSession(lua_State* L)
 {
@@ -643,31 +770,26 @@ int JoinSessionFromCommandLine(lua_State* L)
 	luaL_checktype(L, 1, LUA_TUSERDATA);
 	void* pUserData = lua_touserdata(L, 1);
 	if (pUserData != NULL)
-		luaL_typerror(L, 1, STRING_008e8504);
+		luaL_typerror(L, 1, "SessionClass");
 
 	// The 4th item in the vftable is a code** so it's either a struct with the first field being a jump table, or the jump table in the current struct contains pointers to pointers
 	// (*(pUserData->vftable_0x0[4]))();
 	return 0;
 }
 
-// Functions that are called from Lua
-// The first item in the table is the input to functions, while outputs are added to the end of the table, almost like it's a print output or something.
-
 int len(lua_State* L)
 {
-	UINT length;
+	size_t length;
 	luaL_checklstring(L, 1, &length);
 	lua_pushinteger(L, length);
-	return LUA_OK;
+	return 0;
 }
 
 int GetNumWStringLines(lua_State* L)
 {
-	lua_State* LCopy = L;
 	wchar_t* in_wstring = (wchar_t*)lua_tolstring(L, 1, NULL);
 
-	int plVar2 = 1;
-	L = (lua_State*)1;
+	int totalLines = 1;
 	uint length = WString_GetLength(in_wstring);
 	if (length)
 	{
@@ -675,19 +797,144 @@ int GetNumWStringLines(lua_State* L)
 		for (int i = 0; i < length; i++)
 		{
 			if (in_wstring[i] == L'\n')
-				plVar2++;
-
-			L = (lua_State*)plVar2;
+				totalLines++;
 		}
 	}
-	lua_pushnumber(LCopy, (float)(int)L);
-	return LUA_OK;
+
+	lua_pushnumber(L, (lua_Number)totalLines);
+	return 1;
+}
+
+int GetSaveFlowResult(lua_State* L)
+{
+	lua_pushnumber(L, (lua_Number)g_pGameSettings_008e8410->m_nSaveFlowResult_0x2c);
+	return 1;
+}
+
+int GetSaveFlowState(lua_State* L)
+{
+	lua_pushnumber(L, (lua_Number)g_pGameSettings_008e8410->m_nSaveFlowState_0x434);
+	return 1;
+}
+
+int GetSaveGameInfoValid(lua_State* L)
+{
+	lua_pushboolean(L, (uint)(bool)g_pGameSettings_008e8410->bSaveGameInfoValid_0x44);
+	return 1;
+}
+
+int GetSaveStatus(lua_State* L)
+{
+	lua_pushnumber(L, (lua_Number)g_pGameSettings_008e8410->m_nSaveStatus_0x44c);
+	return 1;
+}
+
+// So many functions did pretty much the exact same thing, so I made it a macro
+#define luaboilerplate(index, type, name) luaL_checktype(L, index, LUA_TUSERDATA); \
+															 type* data = (type*)luaL_checkudata(L, index, name); \
+															 if (data == NULL) luaL_typerror(L, index, name)
+
+// Nothing about this function makes sense.
+static int EnoughMoney(lua_State* L)
+{
+	// Uses a different pointer to reference the PlayerProfile string, it also never changes so it may as well directly reference the constant.
+	// That combined with the cup manager making no sense here makes me think they accidentally used the PlayerProfile string.
+	luaboilerplate(1, PlayerProfile*, "PlayerProfile");
+
+	// Points at a struct with the first item pointing at a player profile, or it's just a PlayerProfile**
+	PlayerProfile* profile = *data;
+
+	LuaStateStruct lss{ L, 2 };
+	int requiredMoney = GetScriptParameterInt(&lss);
+
+	lua_pushboolean(L, profile->m_nMoney_0xe58 >= requiredMoney);
+
+	return 1;
+}
+
+int SetMoney(lua_State* L)
+{
+	luaboilerplate(1, PlayerProfile*, "PlayerProfile");
+
+	PlayerProfile* profile = *data;
+
+	LuaStateStruct lss{ L, 2 };
+	int newMoney = GetScriptParameterInt(&lss);
+	profile->m_nMoney_0xe58 = newMoney;
+
+	return 0;
+}
+
+int __fastcall SubtractMoneyCarsForReal(int cost, PlayerProfile* in_EAX)
+{
+	int newBalance = in_EAX->m_nMoney_0xe58 - cost;
+	// Some kind of moneySpent property?
+	//in_EAX->uint_0xef8 += cost;
+	in_EAX->m_nMoney_0xe58 = newBalance;
+
+	uint local_24 = 0xBDF;
+	//PostEvent_(cost, &local_24, 0);
+
+	return newBalance;
+}
+
+int SubtractMoneyCars(lua_State* L)
+{
+	luaboilerplate(1, PlayerProfile*, "PlayerProfile");
+
+	LuaStateStruct lss{ L, 2 };
+	int cost = GetScriptParameterInt(&lss);
+	int newBalance = SubtractMoneyCarsForReal(cost, *data);
+	lua_pushnumber(L, (lua_Number)newBalance);
+
+	return 1;
+}
+
+int __fastcall SubtractMoneyUpgradesForReal(uint cost, PlayerProfile* in_EAX)
+{
+	int newBalance = in_EAX->m_nMoney_0xe58 - cost;
+	//in_EAX->uint_0xefc += cost;
+	in_EAX->m_nMoney_0xe58 = newBalance;
+
+	uint local_24 = 0xBDF;
+	//PostEvent_(cost, &local_24, 0);
+
+	return newBalance;
+}
+
+int SubtractMoneyUpgrades(lua_State* L)
+{
+	luaboilerplate(1, PlayerProfile*, "PlayerProfile");
+
+	LuaStateStruct lss{ L, 2 };
+	int cost = GetScriptParameterInt(&lss);
+	int newBalance = SubtractMoneyUpgradesForReal(cost, *data);
+	lua_pushnumber(L, (lua_Number)newBalance);
+
+	return 1;
 }
 
 int getplatform(lua_State* L)
 {
 	lua_pushlstring(L, "PC", 2);
-	return LUA_OK;
+	return 1;
+}
+
+int GetTitle(lua_State* L)
+{
+	void* data = lua_touserdata(L, 1);
+
+}
+
+int GetTotalRagdollFlyDistance(lua_State* L)
+{
+	luaL_checktype(L, 1, LUA_TUSERDATA);
+	PlayerProfile** data = (PlayerProfile**)luaL_checkudata(L, 1, "PlayerProfile");
+	if (!data)
+		luaL_typerror(L, 1, "PlayerProfile");
+
+	lua_pushnumber(L, (lua_Number)(int)(long long)roundf((*data)->m_fTotalRagdollFlyDistance_0xf1c));
+	return 1;
 }
 
 int StartKickVote(lua_State* L)
@@ -695,7 +942,7 @@ int StartKickVote(lua_State* L)
 	luaL_checktype(L, 1, LUA_TUSERDATA);
 	void* pUserData = lua_touserdata(L, 1);
 	if (pUserData == NULL)
-		luaL_typerror(L, 1, "userdata");
+		luaL_typerror(L, 1, "SessionClass");
 
 	/*
 	int* piVar1 = *(int**)(pUserData->vftable);
@@ -705,33 +952,375 @@ int StartKickVote(lua_State* L)
 	//FUN_004f0f20(piVar1, &local_8);
 	*/
 
-	return LUA_OK;
+	return 0;
 }
 
 int deg(lua_State* L)
 {
 	float rad = luaL_checknumber(L, 1);
-
 	lua_pushnumber(L, rad * 57.29578f);
 
-	return LUA_OK;
+	return 1;
 }
 
 // FormatMemoryCard will call this function, but given the lack of formatting going on I'd say that's unintentional.
-int FormatMemoryCardForRealMaybe(undefined* param_1)
+int FormatMemoryCardForRealMaybe(undefined4* param_1)
 {
-	return param_1->unkn_0x4;
+	return param_1[1];
 }
 
+sGameSettings* g_pGameSettings_008e8410;
 
 // Left-over from the PS2 version, it still tries to call the formatting function, but it's been removed.
-// It still updates something in the settings, so maybe something strange will happen if this is triggered on the PC version?
+// If called it will mess up the CPU stack, since the current function will pop a parameter, but this code doesn't push one.
 int FormatMemoryCard(lua_State* L)
 {
 	sGameSettings* pSettings = g_pGameSettings_008e8410;
-	FormatMemoryCardForRealMaybe();
-	pSettings->field1088_0x44c = 7;
+
+	((void (*)())FormatMemoryCardForRealMaybe)();
+	//pSettings->field1088_0x44c = 7;
 	return 0;
+}
+
+int SetGlobalFontScale(lua_State* L)
+{
+	g_GlobalFontScale_006993f8 = luaL_checknumber(L, 1);
+	return 0;
+}
+
+const char* UserDataName_008e8488;
+
+int GetNumUpgrades(lua_State* L)
+{
+	luaL_checktype(L, 1, LUA_TUSERDATA);
+
+	void* udata = luaL_checkudata(L, 1, "Garage");
+	if (udata == NULL)
+		luaL_typerror(L, 1, "Garage");
+
+	lua_pushnumber(L, 128.0f);
+	return 1;
+}
+
+int GetNumVisibleButtons(lua_State* L)
+{
+	luaL_checktype(L, 1, LUA_TUSERDATA);
+
+	void* data = lua_touserdata(L, 1);
+	if (!data)
+		luaL_typerror(L, 1, "ButtonBar");
+
+	lua_pushnumber(L, 0.0);
+}
+
+
+
+// Isn't it push then set global?
+#define AddLuaFunction(fn, name)  lua_setglobal(L, name); \
+												    lua_pushcclosure(L, fn, 0); \
+													lua_settable(L, idx)
+
+#define AddLuaGlobal(name, value) lua_setglobal(L, name); \
+													 lua_pushnumber(L, value); \
+													 lua_settable(L, idx)
+
+void Lua_AddLoadAndSaveGlobals(int param_1)
+{
+	lua_State* L = g_pScriptHost_008e8418->stateStruct_0x8->L_0x4;
+	int index = lua_gettop(L);
+	lua_createtable(L, 0, 0);
+	int idx = lua_gettop(L);
+
+	lua_setglobal(L, "Save");
+	lua_pushvalue(L, idx);
+	lua_settable(L, LUA_GLOBALSINDEX);
+
+	AddLuaFunction(GetSaveFlowResult, "GetSaveFlowResult");
+	AddLuaFunction(GetSaveFlowState, "GetSaveFlowState");
+	//AddLuaFunction(GetSaveFlowDeviceStatus, "GetSaveFlowDeviceStatus");
+	//AddLuaFunction(UpdateSaveFlow, "UpdateSaveFlow");
+	//AddLuaFunction(UpdateSaveGameInfo, "UpdateSaveGameInfo");
+	//AddLuaFunction(LoadPlayerProfile, "LoadPlayerProfile");
+	AddLuaFunction(SavePlayerProfile, "SavePlayerProfile");
+	AddLuaFunction(GetSaveGameInfoValid, "GetSaveGameInfoValid");
+	//AddLuaFunction(CheckSaveDevice, "CheckSaveDevice");
+	//AddLuaFunction(CheckSaveDeviceNetwork, "CheckSaveDeviceNetwork");
+	AddLuaFunction(SignalDeviceChanged, "SignalDeviceChanged");
+	//AddLuaFunction(LoadOptions, "LoadOptions");
+	//AddLuaFunction(SaveOptions, "SaveOptions");
+	//AddLuaFunction(RefreshSaves, "RefreshSaves");
+	//AddLuaFunction(GetLastError, "GetLastError");
+	//AddLuaFunction(DeleteSave, "DeleteSave");
+	AddLuaFunction(FormatMemoryCard, "FormatMemoryCard");
+	//AddLuaFunction(LoadPlayerData, "LoadPlayerData");
+	//AddLuaFunction(SavePlayerData, "SavePlayerData");
+	//AddLuaFunction(LoadSystemData, "LoadSystemData");
+	//AddLuaFunction(SaveSystemData, "SaveSystemData");
+	//AddLuaFunction(GetNumExistingSaves, "GetNumExistingSaves");
+	//AddLuaFunction(GetNumFreeSlots, "GetNumFreeSlots");
+	//AddLuaFunction(GetNumSlots, "GetNumSlots");
+	//AddLuaFunction(GetNumUsableSlots, "GetNumUsableSlots");
+	//AddLuaFunction(GetSaveGameInfo, "GetSaveGameInfo");
+	//AddLuaFunction(GetSaveDeviceInfo, "GetSaveDeviceInfo");
+	//AddLuaFunction(GetLastSaveSlotUsed, "GetLastSaveSlotUsed");
+	AddLuaFunction(GetSaveStatus, "GetSaveStatus");
+	//AddLuaFunction(ResetSaveStatus, "ResetSaveStatus");
+	AddLuaFunction(DEBUGLOG, "LaunchDashboard");
+	AddLuaFunction(DEBUGLOG, "SetSaveDevicePoll");
+
+	AddLuaGlobal("SAVEFLOW_OK", 0.0);
+	AddLuaGlobal("SAVEFLOW_ERROR", 1.0);
+	AddLuaGlobal("SAVEFLOW_USER_BACK", 2.0);
+
+	AddLuaGlobal("SAVE_DEVICE_OK", 0.0);
+	AddLuaGlobal("SAVE_DEVICE_CHANGED", 1.0);
+	AddLuaGlobal("SAVE_DEVICE_NOT_ENOUGH_SPACE", 2.0);
+	AddLuaGlobal("SAVE_DEVICE_NOT_AVAILABLE", 3.0);
+	AddLuaGlobal("SAVE_DEVICE_UNFORMATTED", 4.0);
+
+	AddLuaGlobal("SAVEFLOW_NONE", 0.0);
+	AddLuaGlobal("SAVEFLOW_GETSAVEINFO", 1.0);
+	AddLuaGlobal("SAVEFLOW_SAVEPLAYERPROFILE", 2.0);
+	AddLuaGlobal("SAVEFLOW_LOADPLAYERPROFILE", 3.0);
+	AddLuaGlobal("SAVEFLOW_LOADOPTIONS", 4.0);
+	AddLuaGlobal("SAVEFLOW_SAVEOPTIONS", 5.0);
+	AddLuaGlobal("SAVEFlOW_CHECKSAVEDEVICE", 6.0);
+
+	//param_1->unkn_0x44c = 0;
+	lua_settop(L, index);
+}
+
+int exists(lua_State* L)
+{
+	luaL_checklstring(L, 1, NULL);
+
+
+	//if (DoesFileExistWrapper_AndDoesSomeMoreStateStuff(NULL))
+	{
+		lua_pushboolean(L, TRUE);
+		return 1;
+	}
+
+
+	lua_pushnil(L);
+	return 1;
+}
+
+uint UINT_008da690;
+
+int getid(lua_State* L)
+{
+	char buffer[32];
+	uint uVar1 = UINT_008da690++;
+
+	sprintf(buffer, "%x", uVar1);
+	lua_setglobal(L, buffer);
+	return 1;
+}
+
+int getref(lua_State* L)
+{
+	int n = (int)(long long)roundf(lua_tonumber(L, 1));
+	lua_rawgeti(L, LUA_REGISTRYINDEX, n);
+
+	return 1;
+}
+
+void Lua_ClassBinding(int index, void* userdata, register lua_State* unaff_ESI)
+{
+	lua_pushlstring(unaff_ESI, "ClassBind", 9);
+	lua_rawget(unaff_ESI, LUA_REGISTRYINDEX);
+	lua_pushvalue(unaff_ESI, index);
+	lua_rawseti(unaff_ESI, -2, (int)userdata);
+	lua_pop(unaff_ESI, 1);
+}
+
+void Lua_CreateClassMaybe(char* name, lua_CFunction constructorMaybe, lua_CFunction gc, lua_CFunction newindex, register lua_State* L_ESI, register lua_CFunction index_EAX)
+{
+	if (!name)
+	{
+		lua_setglobal(L_ESI, "Class name not given!");
+		lua_error(L_ESI);
+	}
+
+	luaL_newmetatable(L_ESI, name);
+	int index = lua_gettop(L_ESI);
+
+	if (!index_EAX || !newindex)
+	{
+		lua_createtable(L_ESI, 0, 0);
+		int tempIndex = lua_gettop(L_ESI);
+		lua_pushlstring(L_ESI, "__index", 7);
+		lua_pushvalue(L_ESI, tempIndex);
+		lua_settable(L_ESI, index);
+		lua_pushlstring(L_ESI, "__newindex", 10);
+		lua_pushvalue(L_ESI, tempIndex);
+		lua_settable(L_ESI, index);
+		lua_pop(L_ESI, 1);
+	}
+	else
+	{
+		lua_pushlstring(L_ESI, "__index", 7);
+		lua_pushcclosure(L_ESI, index_EAX, 0);
+		lua_settable(L_ESI, index);
+		lua_pushlstring(L_ESI, "__newindex", 10);
+		lua_pushcclosure(L_ESI, newindex, 0);
+		lua_settable(L_ESI, index);
+	}
+
+	if (gc)
+	{
+		lua_pushlstring(L_ESI, "__gc", 4);
+		lua_pushcclosure(L_ESI, gc, 0);
+		lua_settable(L_ESI, index);
+	}
+
+	lua_pop(L_ESI, 1);
+	if (constructorMaybe)
+	{
+		lua_pushcclosure(L_ESI, constructorMaybe, 0);
+		lua_setfield(L_ESI, LUA_GLOBALSINDEX, name);
+	}
+}
+
+int SavePlayerProfile(lua_State* L)
+{
+	uint num = (uint)(long long)roundf(luaL_checknumber(L, 1));
+
+	if (g_pGameSettings_008e8410->m_nSaveFlowState_0x434 != 2 && g_pGameSettings_008e8410->m_nSaveFlowState_0x434 != 3)
+	{
+		g_pGameSettings_008e8410->unkn_0x43c = 0;
+		//g_pGameSettings_008e8410->unkn_0x3c = 1;
+		g_pGameSettings_008e8410->uint_0x20 = num;
+		g_pGameSettings_008e8410->m_nSaveFlowState_0x434 = 2;
+		g_pGameSettings_008e8410->unkn_0x438 = 10;
+		g_pGameSettings_008e8410->unkn_0x24 = 0;
+	}
+
+	return 0;
+}
+
+int ScriptHost_NewIndex(lua_State* L)
+{
+	luaL_getmetafield(L, -3, "__luavars");
+	lua_insert(L, -3);
+	lua_rawset(L, -3);
+	lua_pop(L, 1);
+
+	return 0;
+}
+
+int FUN_00524ca0(lua_State* L, int param_2, register char* in_EAX, register int unaff_EBX)
+{
+	char* pcVar2 = in_EAX + 1;
+
+	do; while (*in_EAX++);
+
+	//pcVar2 = FUN_0054fd60(in_EAX - pcVar2, NULL);
+
+	lua_CFunction fn;
+	// It was originally a while but it's structured like a for so why not
+	for (int i = param_2 - 1; true; i--)
+	{
+		if (i < 0)
+		{
+			lua_pushnil(L);
+			return 1;
+		}
+
+		//fn = FUN_00524c20(*unaff_EBX[i], pcVar2);
+		if (fn) break;
+	}
+
+	lua_pushcclosure(L, fn, 0);
+	return 1;
+}
+
+uint UINT_008e8564;
+
+int ScriptHost_Index(lua_State* L)
+{
+	luaL_getmetafield(L, -2, "__luavars");
+	lua_pushvalue(L, -2);
+	lua_rawget(L, -2);
+	lua_remove(L, -2);
+
+	if (lua_type(L, -1) == LUA_TNIL)
+	{
+		lua_pop(L, 1);
+		const char* string = luaL_checklstring(L, -1, NULL);
+		//if (string)
+			//FUN_00524ca0(L, UINT_008e8564, (char*)string);
+	}
+
+	return 1;
+}
+
+void Lua_AddRegistryFieldAsItem(int index, register lua_State* L_ESI, register char* in_EAX)
+{
+	lua_getfield(L_ESI, LUA_REGISTRYINDEX, in_EAX);
+	lua_setmetatable(L_ESI, index);
+}
+
+void Lua_PushScriptHost(ScriptHost* pScriptHost, register lua_State* L_EAX, register char* name_EDI)
+{
+	Lua_CreateClassMaybe(name_EDI, NULL, NULL, ScriptHost_NewIndex, L_EAX, ScriptHost_Index);
+	lua_setglobal(L_EAX, name_EDI);
+
+	auto newData = (ScriptHost**)lua_newuserdata(L_EAX, sizeof(ScriptHost*));
+	*newData = pScriptHost;
+
+	int index = lua_gettop(L_EAX);
+	Lua_AddRegistryFieldAsItem(index, L_EAX, name_EDI);
+	Lua_ClassBinding(index, pScriptHost, L_EAX);
+	lua_getfield(L_EAX, LUA_REGISTRYINDEX, name_EDI);
+	lua_pushlstring(L_EAX, "__luavars", 9);
+	lua_createtable(L_EAX, 0, 0);
+	lua_rawset(L_EAX, -3);
+	lua_pop(L_EAX, 1);
+	lua_settable(L_EAX, LUA_GLOBALSINDEX);
+}
+
+int Garage_Index(lua_State* L)
+{
+
+}
+
+static void Lua_PushGarage(Garage* pGarage, register lua_State* L_EAX, register char* name_unaff_EDI)
+{
+	//UINT_008e8484 = 0;
+	//UINT_008e9960 = 0;
+	//UINT_008e9964 = 0;
+	//UINT_008e9968 = 0;
+	//UINT_008e996c = 0;
+	//UINT_008e9970 = 0;
+
+	UserDataName_008e8488 = name_unaff_EDI;
+	Lua_CreateClassMaybe(name_unaff_EDI, NULL, NULL, ScriptHost_NewIndex, L_EAX, Garage_Index);
+	lua_setglobal(L_EAX, name_unaff_EDI);
+
+	void* garage = lua_newuserdata(L_EAX, 4);
+	*(Garage**)garage = pGarage;
+	int lastIndex = lua_gettop(L_EAX);
+	Lua_AddRegistryFieldAsItem(lastIndex, L_EAX, name_unaff_EDI);
+	Lua_ClassBinding(lastIndex, pGarage, L_EAX);
+	lua_getfield(L_EAX, LUA_REGISTRYINDEX, name_unaff_EDI);
+	lua_pushlstring(L_EAX, "__luavars", 9);
+	lua_createtable(L_EAX, 0, 0);
+	lua_rawset(L_EAX, -3);
+	lua_pop(L_EAX, 1);
+	lua_settable(L_EAX, LUA_GLOBALSINDEX);
+}
+
+int NextRaceUpdated(lua_State* L)
+{
+	luaL_checktype(L, 1, LUA_TUSERDATA);
+	int* piVar1 = (int*)lua_touserdata(L, 1);
+	if (!piVar1)
+		luaL_typerror(L, 1, "SessionClass");
+
+	//lua_pushboolean(L, (piVar1->byte_0x216c & 0x20) >> 5);
+	return 1;
 }
 
 
@@ -758,7 +1347,6 @@ void CreateThatByteArray()
 	}
 }
 
-
 int FUN_005bb8a0(uint indexKinda)
 {
 	uint i = -1;
@@ -766,6 +1354,15 @@ int FUN_005bb8a0(uint indexKinda)
 		i += 8;
 
 	return (uint)byteArray_00652728[indexKinda] + i;
+}
+
+
+void vector2IntToVector4Int(Vector4Int* vector, int x, int y)
+{
+	vector->w = -1;
+	vector->a = -1;
+	vector->x = x;
+	vector->y = y;
 }
 
 
@@ -789,7 +1386,7 @@ DWORD MWFileObject::WriteFileToHandle(LPCVOID buffer, DWORD bytesToWrite)
 	{
 		hFile = this->handle;
 
-		for (int d = bytesToWrite; d != 0; d -= tempToWrite)
+		for (int d = bytesToWrite; d; d -= tempToWrite)
 		{
 			// Writes in 64 KB chunks
 			tempToWrite = 0xFFFF;
@@ -937,7 +1534,7 @@ char* MWFileObject::GetFilePosButLikeWhy()
 }
 
 
-bool MWFileObject::IsFilePosBeyond()
+bool MWFileObject::AtEndOfFile()
 {
 	return ((int)this->filePos > 0) && (this->size <= this->filePos);
 }
@@ -970,7 +1567,7 @@ void __fastcall MWFileObject::Close()
 
 MWFileObject* MWFileObject::ResetMaybe(int bFree)
 {
-	//this->vtable = &JMPTABLE_0067b6f8;
+	//this->vtable = JMPTABLE_0067b6f8;
 	if (this->handle != NULL)
 	{
 		CloseHandle(this->handle);
@@ -1007,7 +1604,7 @@ uint UINT_008da730;
 // My own addition to make reading this next function much easier.
 // Macros to read different types from a char buffer at an offset.
 #define ReadAsInt(buf, offset) (*(int*)(&buf[offset]))
-#define ReadAsIntP(buf, offset) (*(int**)(&buf[offset]))
+#define ReadAsIntP(buf, offset) ((int*)(&buf[offset]))
 #define ReadAsByte(buf, offset) (*(BYTE*)(&buf[offset]))
 #define ReadAsString(buf, offset) (&buf[offset])
 
@@ -1068,6 +1665,12 @@ void OpenBFS(LPCSTR filename, register YetAnotherFileObject* unaff_EDI)
 		FUN_005610f0((int)&DAT_0069bd10, _Size - 0x10 >> 2);
 	*/
 
+	// For now I'll just do it the standard way
+	char* ptr = (char*)malloc((size_t)bfsFile);
+	DWORD bytesRead;
+	ReadFile(unaff_EDI->handle_0x0, ptr, (size_t)bfsFile, &bytesRead, NULL);
+	bfsFile = (char*)ptr;
+
 	// The hash size located 16 bytes from the start, and must be 997.
 	// If it has to be a known value, why include it in the file? Some kind of anti-tamper?
 	if (ReadAsInt(bfsFile, 0x10) != 0x3E5)
@@ -1103,10 +1706,10 @@ void OpenBFS(LPCSTR filename, register YetAnotherFileObject* unaff_EDI)
 		{
 			ReadAsInt(bfsFile, 4) += (int)pvVar3;
 
-			// The ghidra code uses a second comparison like a trick to set j during the if. I chose to do it afterwards, is it any different?
+			// The p code uses a second comparison like a trick to set j during the if. I chose to do it afterwards, is it any different?
 			// && (j = 0, bfsFile[1] != NULL)
 			// If that's all it was for I can probably just remove it
-			if ((bfsFile[1] != NULL))
+			if (bfsFile[1] != NULL)
 			{
 				int j = 0;
 				do
@@ -1122,177 +1725,15 @@ void OpenBFS(LPCSTR filename, register YetAnotherFileObject* unaff_EDI)
 	return;
 }
 
-
-/////////////////////////////////////////////////
-//
-// Input
-// 
-/////////////////////////////////////////////////
-
-BYTE lpKeyState_008d7d60[0x40];
-BYTE lpKeyState_008d7e60[0x40];
-HHOOK HHOOK_008da738;
-
-HKL HKL_008d7c44;
-
-LRESULT Keyboard_HookProc(int code, WPARAM wParam, LPARAM lParam);
-
-HOOKPROC nextHook = (HOOKPROC)Keyboard_HookProc;
-
-LRESULT KeyboardController::Keyboard_Hook(uint param_1)
+// I called this one 'Again', but couldn't find the original one
+void BFSReadOverlapAgain()
 {
-	// Ghidra shows the STOSD.REP instruction as a for loop
-	__stosd((unsigned long*)lpKeyState_008d7e60, 0, 0x10);
-	__stosd((unsigned long*)lpKeyState_008d7d60, 0, 0x10);
 
-	if (HHOOK_008da738 == NULL)
-	{
-		DWORD dwThreadId = GetCurrentThreadId();
-		HHOOK_008da738 = SetWindowsHookExA(2, nextHook, NULL, dwThreadId);
-		if (HHOOK_008da738 == NULL)
-		{
-			//uStack_2c = 0xF;
-			//uStack_30 = 0;
-			//uStack_40 = 0;
-			//FUN_0055b050(auStack_44, "KeyboardController::Unable to hook keyboard", 0x2B);
-			//appuStack_28[0] = &PTR_FUN_006578c4;
-			//uStack_4 = 0xF;
-			//uStack_8 = 0;
-			//uStack_18 = 0;
-			//FUN_0055ae50(auStack_1c, auStack_44, 0, 0xFFFFFFFF);
-
-			// Some kind of exception code, I'll just do this for now.
-			throw EXCEPTION_INVALID_HANDLE;
-		}
-	}
-
-	HKL_008d7c44 = GetKeyboardLayout(0);
-
-	/*
-	__stosd(UINT_008d7c48, 0, 0x40);
-	DAT_008d7d58 = 0;
-	DAT_008da740 = 0;
-	this->field_0x12c = 1;
-	this->field_0x130 = 1;
-	*/
-	int iVar1 = 0;//FUN_00553220();
-	if (iVar1 == 0)
-	{
-		//this->vftable_0x0[17]();
-		//FUN_00553360();
-	}
-	iVar1 = 0;
-	do
-	{
-		//FUN_00553120();
-		iVar1++;
-	} while (iVar1 < 20);
-
-	return 1;
 }
 
-int DAT_008da740;
-uint DAT_008da734;
-int* PTR_008e844c;
 
-LRESULT Keyboard_HookProc(int code, WPARAM wParam, LPARAM lParam)
+int SignalDeviceChanged(lua_State* L)
 {
-	if (code < 0)
-	{
-		CallNextHookEx(HHOOK_008da738, code, wParam, lParam);
-		return 0;
-	}
-
-	uint wVirtKey = wParam & 0xFF;
-	if (lParam < 0)
-	{
-		if (lpKeyState_008d7e60[wVirtKey] < 0)
-			DAT_008da740--;
-
-		lpKeyState_008d7e60[wVirtKey] &= 0x7F;
-	}
-	else
-	{
-		// In Binary: 0?00 0000 0000 0000 0000 0000 0000 0000
-		if (DAT_008da734 || ((lParam & 0x40000000U) == 0))
-		{
-			if (lpKeyState_008d7e60[wVirtKey] > -1)
-				DAT_008da740++;
-
-			lpKeyState_008d7e60[wVirtKey] ^= 1;
-			lpKeyState_008d7e60[wVirtKey] |= 0x80;
-
-			lpKeyState_008d7d60[wVirtKey] += 1;
-		}
-		if (PTR_008e844c[11] != 0)
-		{
-			if (((lParam & 0x40000000U) != 0) && (PTR_008e844c[5] == 0))
-			{
-				CallNextHookEx(HHOOK_008da738, code, wParam, lParam);
-				return 0;
-			}
-
-			WCHAR convertedKey = 0;
-			// local_4 is AND'd before it's even initialized.
-			uint local_4;
-			local_4 &= 0xFFFF0000;
-			int iVar1 = ToUnicode(wVirtKey, lParam, lpKeyState_008d7e60, &convertedKey, 8, 0);
-			if (iVar1 == 1)
-				// Treat local_4 as an array of 2 shorts, take the second one and concatentate with local_20.
-				local_4 = (((short*)&local_4)[1] << 16) | (short)convertedKey;
-
-			LPARAM LVar4;
-			uint uVar3;
-			iVar1 = ToAscii(wVirtKey, lParam, lpKeyState_008d7e60, (LPWORD)&convertedKey, 0);
-			if (iVar1 == -1)
-			{
-				uVar3 = convertedKey & 0xFFFF;
-				wVirtKey = 0;
-				LVar4 = 0;
-			}
-			else
-			{
-				if (iVar1 != 0)
-				{
-					if (iVar1 > 0)
-					{
-						int iVar2 = 0;
-						do
-						{
-							//FUN_00550350(&local_20 + (iVar2 * 2), wVirtKey, 0, local_4);
-							iVar2++;
-						} while (iVar2 < iVar1);
-					}
-					goto hookExit;
-				}
-				uVar3 = 0;
-				LVar4 = lParam;
-			}
-			//FUN_00550350(uVar3, wVirtKey, LVar4, local_4);
-		}
-	}
-hookExit:
-	CallNextHookEx(HHOOK_008da738, code, wParam, lParam);
+	//FileObject_DoNothing();
 	return 0;
-}
-
-// Another function that looks suspicously like DoNotCallEver.
-void* KeyboardController::Keyboard_Unhook(BYTE bFree)
-{
-	//this->vftable_0x0 = JMPTABLE_0067b818;
-	if (this->int_0x12c)
-	{
-		if (HHOOK_008da738 != NULL)
-			UnhookWindowsHookEx(HHOOK_008da738);
-
-		HHOOK_008da738 = NULL;
-		//DAT_008da73c = NULL;
-		this->int_0x12c = 0;
-		this->byte_0x130 = 0;
-	}
-	//this->vftable_0x0 = JMPTABLE_0067b738;
-	if (bFree & 1)
-		delete this;
-
-	return this;
 }

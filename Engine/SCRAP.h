@@ -39,7 +39,7 @@
 // I don't know the exact version that was used, but 5.1.5 can be downloaded from here.
 // https://www.lua.org/versions.html#5.1
 // It's from 2012 but it's the only version of 5.1 available.
-// According to 5.1.5's code there should be a full version string somewhere but there isn't one.
+// According to 5.1.5's code there should be a full version string somewhere but there isn't one, does that mean they used 5.1.0?
 #include "lua-5.1.5/src/lapi.h"
 #include "lua-5.1.5/src/lauxlib.h"
 #include "lua-5.1.5/src/lcode.h"
@@ -50,6 +50,10 @@
 #include "lua-5.1.5/src/llex.h"
 #include "lua-5.1.5/src/llimits.h"
 
+// zlib 1.3.1
+// Apparently the version used was 1.3.3, but 1.3.1 is the latest version on GitHub as of writing this, so that must have referred to something else
+#include "../zlib-1.3.1/zlib.h"
+#include "../zlib-1.3.1/zconf.h"
 
 // Wait a minute, Microsoft already did this
 #define uint UINT
@@ -69,7 +73,6 @@
 // long and int are the same size? Why is it a 'long' then?
 #define undefined8 unsigned long long
 
-
 // Doesn't end there, putting aside the missed opportunity to call it a double double, it turns out a long double is the same size as a double.
 // I couldn't find much information about what ghidra's float10 actually is.
 // I've heard it's an 80-bit float but 64 is the best we're going to get without some other solution.
@@ -78,7 +81,7 @@
 // Can't do += sizeof() but you can with this workaround.
 #define size_of(type) (1 * sizeof(type))
 
-
+void CaptionlessTaskModalMessageBox(LPCSTR lpText);
 void CreateErrorMessageAndDie(const char* message, ...);
 
 // Formerly SlashConvertString
@@ -102,8 +105,6 @@ char Char_ToLowercase(char theChar);
 int WString_GetLength(wchar_t* in_wstring);
 
 wchar_t* WString_SimpleCopy(wchar_t* Dst, wchar_t* Src);
-
-
 
 const char* StringList_00681888[256] =
 {
@@ -140,19 +141,19 @@ const char* StringList_00681888[256] =
 	// ... null pointers to fill the rest of the array, 256 entries long.
 };
 
+float g_GlobalFontScale_006993f8;
+
 void AddStringToList(int index, const char* newString);
 
 bool String_CompareAsIntegers(int* ints1, int* ints2);
 
 bool StringToNum(char* stringFloat, float* outFloat);
 
-
 struct TableItemStructThing
 {
 	// 6 undefined bytes at offset 0x0
 	BYTE byte_0x6;
 };
-
 
 // LuaTable's StructThing
 struct astruct_169
@@ -175,28 +176,63 @@ struct LuaStateStruct2
 	void* unkn_0x8;
 };
 
+struct ScriptHost
+{
+	void (**vftable_0x0)();
+	// 4 undefined bytes at offset 0x4
+	LuaStateStruct2* stateStruct_0x8;
+};
 
-// In the original code these are structs that have a function table as their first property, but to make things easier I changed them to C++ classes.
+ScriptHost* g_pScriptHost_008e8418;
 
-// Turns out, I spent a ton of time decompiling a lua struct I could have looked up
-// At the very least it's a lot of code that I don't have to decompile anymore.
+struct PlayersList
+{
+	void (**vftable_0x0)();
+	Player** m_aCurrentPlayers_0x4;
+	Player* m_pLastCurrentPlayer_0x8; // Points at the last player in aCurrentPlayers
+	// 4 undefined bytes at offset 0xC
+	Player** m_aRecentPlayers_0x10;
+	Player* m_pLastRecentPlayer_0x14; // Same thing, but for the recent players
+	// 8 undefined bytes at offset 0x18
+	BOOL m_bListShowing_0x93d;
+};
 
-// Functions that are called from lua
+struct Garage
+{
+	//BYTE pad_0x0[4];
+	uint uint_0x4;
+	uint int_0x8;
+	void* ptr_0xc;
+	//BYTE pad_0x10[84];
+	uint32_t m_nCarsOwned_0x64;
+};
 
-// Error Codes
-// Lua does not define an ok macro 
-#define LUA_OK 0
+// Lua CFunctions
 
-int len(lua_State* L);
+int math_deg(lua_State* L);
+
 int GetNumWStringLines(lua_State* L);
+int GetSaveFlowResult(lua_State* L);
+int GetSaveFlowState(lua_State* L);
+int GetSaveGameInfoValid(lua_State* L);
+int GetSaveStatus(lua_State* L);
+int EnoughMoney(lua_State* L);
+int SetMoney(lua_State* L);
+int SubtractMoneyCars(lua_State* L);
+int SubtractMoneyUpgrades(lua_State* L);
 int getplatform(lua_State* L);
-int StartKickVote(lua_State* L);
+int GetTotalRagdollFlyDistance(lua_State* L);
 int deg(lua_State* L);
+int StartKickVote(lua_State* L);
 int FormatMemoryCard(lua_State* L);
 int Lua_KickPlayer(lua_State* L);
 int JoinCurrentSession(lua_State* L);
 int JoinSessionFromCommandLine(lua_State* L);
 
+int SetGlobalFontScale(lua_State* L);
+int DEBUGLOG(lua_State* L);
+
+int __fastcall GetScriptParameterInt(LuaStateStruct* lss_EAX);
 
 // This jump table thing is making me think it's not a class but like a bugbear-made method system. But maybe that's just how classes are implemented in machine code and Ghidra is right?
 /*
@@ -213,6 +249,8 @@ void (*JMPTABLE_0067b6f8[])() = {
 	FileObject::FlushBuffers,
 };
 */
+
+// In the original code these are structs that have a function table as their first property, but to make things easier I changed them to C++ classes.
 
 // Thanks to mrwonko on GitHub for their file object reverse engineering
 // There's more than one file object, so this one is the MrWonkoFileObject
@@ -236,30 +274,19 @@ public:
 
 	char* filename1; // 0x401C
 	char* filename2; // 0x4020
-	// Two different filename properties, I'm thinking maybe it's for objects that need to load both a model and texture file?
+	// Two different filename properties (maybe), I'm thinking it's for objects that need to load both a model and texture file?
 
 	DWORD WriteFileToHandle(LPCVOID buffer, DWORD bytesToWrite);
-
 	void bbSetFilePointer(int newLoc);
-
 	void Create(LPCSTR lpFilename, uint flags);
-
 	void SetFilePos(int newPos, int mode);
-
 	void FlushBuffers();
-
 	char* GetFilePosButLikeWhy();
-
-	bool IsFilePosBeyond();
-
+	bool AtEndOfFile();
 	int GetSize();
-
 	void Clear();
-
 	void __fastcall Close();
-
 	void DoNothing();
-
 	MWFileObject* ResetMaybe(int bFree);
 };
 
@@ -280,7 +307,6 @@ private:
 public:
 };
 
-
 // Used for OpenBFS
 struct YetAnotherFileObject
 {
@@ -295,10 +321,7 @@ struct YetAnotherFileObject
 	int int_0x220;
 };
 
-
-
 void OpenBFS(LPCSTR filename, register YetAnotherFileObject* unaff_EDI);
-
 
 // Thanks to Sewer56 on GitHub for figuring out these structs.
 
@@ -312,6 +335,11 @@ struct Vector3_pad
 	float x, y, z, pad;
 };
 
+struct Vector4Int
+{
+	int x, y, z, w, a;
+};
+
 struct Quaternion
 {
 	float y, z, x, w;
@@ -319,9 +347,7 @@ struct Quaternion
 
 struct Matrix33
 {
-	Vector3_pad right;
-	Vector3_pad up;
-	Vector3_pad at;
+	Vector3_pad right, up, at;
 };
 
 struct sVehicle
@@ -362,9 +388,8 @@ struct sVehicle
 	//
 };
 
-class Player
+struct Player
 {
-private:
 	void (**m_pVFT_0x0)();
 	// 12 undefined bytes at offset 0x4
 	undefined4 unkn_0x10, unkn_0x14, unkn_0x18;
@@ -380,7 +405,7 @@ private:
 	sVehicle* m_pVehicle_0x33c;
 	uint32_t m_nCarID_0x340;
 	uint32_t m_nSkin_0x344;
-	// 4 undefined bytes at offset 0x348
+	BOOL m_bGodMode_0x348;
 	uint32_t m_bDriverFemale_0x34c;
 	uint32_t m_nDriverSkin_0x350;
 	// 20 undefined bytes at offset 0x354
@@ -388,19 +413,18 @@ private:
 	uint32_t m_nFlags_0x36c;
 	// 16 undefined bytes at offset 0x370
 	uint32_t m_bDisableControlAndReset_0x380;
-	// 168 undefined bytes at offset 0x384
+	// 4 undefined bytes at offset 0x384
+	uint32_t m_nUnknown_0x388;
+	// 164 undefined bytes at offset 0x388
 	Vector3_pad m_vPosition_0x428;
 	// 116 undefined bytes at offset 0x42c
 	float m_fReadOnlyDamage_0x49c;
 	// 484 undefined bytes at offset 0x4a0
+	uint32_t m_nUnknown_0x4e8;
 	float m_fSteerAngle_0x684;
 	float m_fGasPedal_0x688;
 	float m_fBrakePedal_0x68c;
-
-public:
-
 };
-
 
 // PropertyDb
 
@@ -414,42 +438,81 @@ public:
 	PropertyDb* DoNotCallEver(int bDestruct); // Destructor included in the function tables, puts up the error message to catch bugs
 };
 
-struct PlayerProfile
-{
-	// 3636 undefined bytes at offset 0x0
-	wchar_t m_wsPlayerName_0xe34[16];
-};
-
-struct sPlayerArray
-{
-	Player* m_aPlayers[8];
-};
+typedef Player* sPlayerArray[8];
 
 struct PlayerHost
 {
 	void (**vftable_0x0)();
-	// 16 undefined bytes at offset 0x4
+	//BYTE pad_0x4[16];
 	sPlayerArray* m_pPlayerArray_0x14;
-	// 2416 undefined bytes at offset 0x18
+	//BYTE pad_0x18[2416];
 	uint32_t m_nNumCars_0x988;
-	// 130,784 undefined bytes at offset 0x98c
+	//BYTE pad_0x98c[130784];
 	uint32_t m_nLevelID_0x2086c;
 };
 
+
+
 struct sGameSettings
 {
-	// 1152 undefined bytes at offset 0x0
+	//BYTE pad_0x0[32];
+	uint uint_0x20;
+	undefined4 unkn_0x24;
+	//BYTE pad_0x28[4];
+	int m_nSaveFlowResult_0x2c;
+	//BYTE pad_0x30[20];
+	BOOL bSaveGameInfoValid_0x44;
+	//BYTE pad_0x48[1008];
+	int m_nSaveFlowState_0x434;
+	undefined4 unkn_0x438;
+	undefined4 unkn_0x43c;
+	//BYTE pad_0x440[12];
+	int m_nSaveStatus_0x44c;
+	//BYTE pad_0x450[48]
 	uint32_t m_nLevelID_0x480;
-	// 4 undefined bytes at offset 0x484
+	//BYTE pad_0x484[4];
 	uint32_t m_nNumLaps_0x488;
-	// 1324 undefined bytes at offset 0x48c
+	//BYTE pad_0x48c[296];
+	wchar_t* m_aPlayerNames_0x5b0;
+	// BYTE pad_0x5b4[1028]
 	PlayerHost* m_pHost_0x9b8;
-	// 80 undefined bytes at offset 0x9bc
+	//BYTE pad_0x9bc[80];
 	BOOL m_bStarted_0xa0c;
-	// 1488 undefined bytes at offset 0xa10
+	//BYTE pad_0xa10[1488];
 	PlayerProfile m_pPlayerProfile_0xfe0;
 };
 
+struct CupRace
+{
+	BOOL m_bLocked_0x0;
+	BOOL m_bCompleted_0x4;
+	BYTE undefined_0x8[104];
+};
+
+struct CupManager
+{
+	CupRace m_aCupRaces_0x0[4];
+	BYTE undefined_0x58c[968]; // (could be space for more races in the array)
+	uint32_t m_nActiveIndex_0x588;
+	BYTE undefined_0x58c[28];
+	uint32_t m_nCupRaceLength_0x5a8;
+	BYTE undefined_0x5ac[2220];
+};
+
+CupManager* g_pCupManager_008e8480;
+
+struct BCORE_Camera
+{
+	void (*vftable_0x0[])();
+};
+
+struct PlayerProfile
+{
+	void (*vftable_0x0)();
+	Garage m_sGarage_0x3c4;
+	int m_nMoney_0xe58;
+	float m_fTotalRagdollFlyDistance_0xf1c;
+};
 
 // INPUT
 
@@ -464,4 +527,52 @@ private:
 
 	LRESULT Keyboard_Hook(uint param_1);
 	void* Keyboard_Unhook(BYTE param_1);
+};
+
+// TIME
+
+struct TimeInfo
+{
+	// 8 undefined bytes at offset 0x0
+	LARGE_INTEGER counter_0x8;
+	undefined4 unkn_0x10;
+	undefined4 unkn_0x14;
+	undefined4 unkn_0x18;
+	undefined4 unkn_0x1c;
+	undefined4 unkn_0x20;
+};
+
+struct LoadingBar
+{
+	// 4 undefined bytes at offset 0x0
+	undefined4 unkn_0x4;
+	undefined4 unkn_0x8;
+	undefined4 unkn_0xc;
+	// My current theory for these is that they control the length and offset of the loading bar, since the equation is (progress * scales[i] + offsets[i])
+	float offsets_0x10[64];
+	float scales_0x110[64];
+	float progress_0x210;
+	// 172 undefined bytes at offset 0x214
+	TimeInfo info_0x2c0;
+	// 48 undefined bytes at offset 0x2c4
+	int int_0x2f4;
+};
+
+// Is there such thing as a declaration for typedefs?
+typedef LPCSTR D3DXHANDLE;
+
+struct Shader
+{
+	void(**vftable_0x0)();
+	undefined4 unkn_0x4;
+	int int_0x8;
+	// 12 undefined bytes at offset 0xC
+	void* unkn_0x18;
+	void* unkn_0x1c;
+	uint flags_0x50;
+	struct ID3DXEffect* pEffect_0x54;
+	// 16 undefined bytes at offset 0x58
+	D3DXHANDLE hTex0_0x68, hTex1_0x6c, hTex2_0x70, hTex3_0x74, mCub_0x78, dFac_0x7c, vDiff_0x80;
+	// 4 undefined bytes at offset 0x84
+	uint strideMaybe_0x88;
 };
