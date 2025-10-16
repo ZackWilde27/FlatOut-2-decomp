@@ -146,6 +146,9 @@
     <ClCompile Include="VertexShaderConstants.cpp">
       <Filter>Source Files\types</Filter>
     </ClCompile>
+    <ClCompile Include="MemoryManager.cpp">
+      <Filter>Source Files\types</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="decomp2.rc">

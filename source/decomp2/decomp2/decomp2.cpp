@@ -397,7 +397,7 @@ public:
 	void* ptr_0x20;
 private:
 	uint uint_0xcc;
-	uint uint_0xd0;
+	uint m_nMaxTextureSize_0xd0;
 public:
 	BOOL bShowMouseCursor_0x228;
 	int nCursorDisplayCounter_0x1a4;
@@ -431,12 +431,9 @@ public:
 		if (baseSize <= TextureSize_008e5768)
 			TextureSize_008e5764 = baseSize;
 
-		if (this->uint_0xd0 <= TextureSize_008e5768)
-			TextureSize_008e5768 = this->uint_0xd0;
-
+		if (m_nMaxTextureSize_0xd0 <= TextureSize_008e5768)
+			TextureSize_008e5768 = m_nMaxTextureSize_0xd0;
 	}
-
-
 
 	// Destroying Windows
 	void bbDestroyWindow(register undefined4* in_ECX)
